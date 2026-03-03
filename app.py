@@ -37,6 +37,9 @@ class State:
     # admin_id -> {"step": "user_id", "plan_code": "month|year"}
     grant_draft: dict[int, dict]
 
+    # users for whom old ReplyKeyboard was explicitly removed
+    reply_kb_removed_users: set[int]
+
 
 def _is_admin(state: State, user_id: int) -> bool:
     return user_id in state.settings.admin_ids
@@ -286,12 +289,13 @@ async def cmd_start(message: Message, state: State) -> None:
         last_name=u.last_name,
     )
 
-    # If an old ReplyKeyboardMarkup was previously shown, remove it without cluttering the chat.
-    try:
-        tmp = await message.answer(".", reply_markup=ReplyKeyboardRemove())
-        await message.bot.delete_message(chat_id=message.chat.id, message_id=tmp.message_id)
-    except Exception:
-        pass
+    # Remove legacy bottom keyboard once for user.
+    if u.id not in state.reply_kb_removed_users:
+        try:
+            await message.answer(" ", reply_markup=ReplyKeyboardRemove())
+            state.reply_kb_removed_users.add(u.id)
+        except Exception:
+            pass
 
     msg_id = state.menu_message_id.get(u.id)
     new_id = await show_shop(bot=message.bot, state=state, user_id=u.id, chat_id=message.chat.id, message_id=msg_id)
@@ -872,6 +876,18 @@ async def message_text_router(message: Message, state: State) -> None:
             reply_markup=kb.admin_menu_kb(),
         )
         state.menu_message_id[user_id] = new_id
+        return
+
+    # Fallback: if user writes any text outside active flows, show main menu.
+    msg_id = state.menu_message_id.get(user_id)
+    new_id = await show_shop(
+        bot=message.bot,
+        state=state,
+        user_id=user_id,
+        chat_id=message.chat.id,
+        message_id=msg_id,
+    )
+    state.menu_message_id[user_id] = new_id
 
 
 def build_dispatcher(state: State) -> Dispatcher:
@@ -929,6 +945,7 @@ async def main() -> None:
         awaiting_payment_proof={},
         broadcast_draft={},
         grant_draft={},
+        reply_kb_removed_users=set(),
     )
 
     bot = Bot(token=settings.bot_token)
