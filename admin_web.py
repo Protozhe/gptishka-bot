@@ -9,6 +9,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
 from config import Settings, load_settings
 from db import Database, PLANS, from_iso
@@ -95,7 +96,7 @@ async def on_startup() -> None:
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request) -> HTMLResponse | RedirectResponse:
+async def login_page(request: Request) -> Response:
     if _is_auth(request):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", _base_ctx(request))
@@ -121,7 +122,7 @@ async def logout(request: Request) -> RedirectResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
+async def dashboard(request: Request) -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
@@ -148,7 +149,7 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
 
 
 @app.get("/orders", response_class=HTMLResponse)
-async def orders_page(request: Request, status: str = "pending") -> HTMLResponse | RedirectResponse:
+async def orders_page(request: Request, status: str = "pending") -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
@@ -170,7 +171,7 @@ async def orders_page(request: Request, status: str = "pending") -> HTMLResponse
 
 
 @app.get("/orders/{order_id}", response_class=HTMLResponse)
-async def order_detail(request: Request, order_id: int) -> HTMLResponse | RedirectResponse:
+async def order_detail(request: Request, order_id: int) -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
@@ -242,7 +243,7 @@ async def order_reject(request: Request, order_id: int) -> RedirectResponse:
 
 
 @app.get("/expiring", response_class=HTMLResponse)
-async def expiring_page(request: Request) -> HTMLResponse | RedirectResponse:
+async def expiring_page(request: Request) -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
@@ -256,7 +257,7 @@ async def expiring_page(request: Request) -> HTMLResponse | RedirectResponse:
 
 
 @app.get("/broadcast", response_class=HTMLResponse)
-async def broadcast_page(request: Request) -> HTMLResponse | RedirectResponse:
+async def broadcast_page(request: Request) -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
@@ -310,7 +311,7 @@ async def broadcast_send(
 
 
 @app.get("/grant", response_class=HTMLResponse)
-async def grant_page(request: Request) -> HTMLResponse | RedirectResponse:
+async def grant_page(request: Request) -> Response:
     guard = _require_auth(request)
     if guard:
         return guard
