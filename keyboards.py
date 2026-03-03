@@ -24,8 +24,6 @@ def main_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton(text=_l(lang, "Смена языка", "Change language"), callback_data="nav:lang")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -36,8 +34,6 @@ def buy_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=_l(lang, "Моя подписка", "My subscription"), callback_data="nav:sub")],
         [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -69,8 +65,6 @@ def order_kb(order_id: int, *, is_admin: bool, lang: str = "ru") -> InlineKeyboa
         [InlineKeyboardButton(text=_l(lang, "Я оплатил", "I paid"), callback_data=f"paid:{order_id}")],
         [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:buy")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -78,8 +72,6 @@ def proof_wait_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text=_l(lang, "Отмена", "Cancel"), callback_data="nav:shop")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -89,15 +81,11 @@ def renew_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=_l(lang, "Продлить 1 год", "Renew 1 year"), callback_data="buy:year")],
         [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def simple_back_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")]]
-    if is_admin:
-        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

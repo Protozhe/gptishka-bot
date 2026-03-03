@@ -62,6 +62,13 @@ class Settings:
     lava_payment_url_template: str  # e.g. "https://pay.example/{order_id}"
     lava_webhook_secret: str
 
+    # Web admin
+    admin_web_host: str
+    admin_web_port: int
+    admin_web_login: str
+    admin_web_password: str
+    admin_web_secret: str
+
 
 def load_settings() -> Settings:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
@@ -83,4 +90,9 @@ def load_settings() -> Settings:
         db_path=os.getenv("DB_PATH", "bot.db"),
         lava_payment_url_template=os.getenv("LAVA_PAYMENT_URL_TEMPLATE", ""),
         lava_webhook_secret=os.getenv("LAVA_WEBHOOK_SECRET", ""),
+        admin_web_host=os.getenv("ADMIN_WEB_HOST", "0.0.0.0"),
+        admin_web_port=int(os.getenv("ADMIN_WEB_PORT", "8080")),
+        admin_web_login=os.getenv("ADMIN_WEB_LOGIN", "admin"),
+        admin_web_password=os.getenv("ADMIN_WEB_PASSWORD", ""),
+        admin_web_secret=os.getenv("ADMIN_WEB_SECRET", ""),
     )

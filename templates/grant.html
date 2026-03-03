@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h4 class="mb-3">Ручная выдача подписки</h4>
+        <form method="post" action="/grant" class="d-grid gap-3">
+          <div>
+            <label class="form-label">Telegram User ID</label>
+            <input type="text" name="user_id" class="form-control" placeholder="123456789" required>
+          </div>
+          <div>
+            <label class="form-label">Тариф</label>
+            <select name="plan_code" class="form-select">
+              {% for code, plan in plans.items() %}
+              <option value="{{ code }}">{{ plan.name }} ({{ plan.price_rub }} ₽)</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-dark">Выдать</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

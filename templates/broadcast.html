@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h4 class="mb-3">Новая рассылка</h4>
+        <form method="post" action="/broadcast" class="d-grid gap-3">
+          <div>
+            <label class="form-label">Аудитория</label>
+            <select name="target" class="form-select">
+              <option value="all">Всем</option>
+              <option value="active">Только активным</option>
+              <option value="expiring">Только истекающим</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Текст сообщения</label>
+            <textarea name="text" class="form-control" rows="7" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-dark">Отправить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h4 class="mb-3">История</h4>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Target</th>
+                <th>OK</th>
+                <th>FAIL</th>
+                <th>Создана</th>
+                <th>Отправлена</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in logs %}
+              <tr>
+                <td>{{ row.broadcast_id }}</td>
+                <td>{{ row.target }}</td>
+                <td>{{ row.ok_count }}</td>
+                <td>{{ row.fail_count }}</td>
+                <td>{{ row.created_at_local }}</td>
+                <td>{{ row.sent_at_local }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="text-muted">Пусто</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

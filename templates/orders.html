@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Заказы</h4>
+      <div class="btn-group">
+        <a class="btn btn-sm {% if current_status=='pending' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/orders?status=pending">Ожидают</a>
+        <a class="btn btn-sm {% if current_status=='paid' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/orders?status=paid">Оплачены</a>
+        <a class="btn btn-sm {% if current_status=='rejected' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/orders?status=rejected">Отклонены</a>
+        <a class="btn btn-sm {% if current_status=='all' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/orders?status=all">Все</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>User ID</th>
+            <th>Тариф</th>
+            <th>Сумма</th>
+            <th>Статус</th>
+            <th>Комментарий</th>
+            <th>Создан</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td><a href="/orders/{{ row.order_id }}">#{{ row.order_id }}</a></td>
+            <td>{{ row.user_id }}</td>
+            <td>{{ row.plan_name }}</td>
+            <td>{{ row.amount_rub }} ₽</td>
+            <td>{{ row.status_label }}</td>
+            <td>{{ row.comment_short }}</td>
+            <td>{{ row.created_local }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-muted">Заказов не найдено</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

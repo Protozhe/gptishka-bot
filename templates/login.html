@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card card-soft">
+      <div class="card-body p-4">
+        <h4 class="mb-3">Вход в админку</h4>
+        <form method="post" action="/login" class="d-grid gap-3">
+          <div>
+            <label class="form-label">Логин</label>
+            <input type="text" name="login" class="form-control" required>
+          </div>
+          <div>
+            <label class="form-label">Пароль</label>
+            <input type="password" name="password" class="form-control" required>
+          </div>
+          <button type="submit" class="btn btn-dark">Войти</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

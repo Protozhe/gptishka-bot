@@ -173,30 +173,37 @@ class Database:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
-    async def mark_order_paid(self, order_id: int) -> dict | None:
-        order = await self.get_order(order_id)
-        if not order:
-            return None
-        if order["status"] != "pending":
-            return order
+    async def list_orders(self, status: str | None = None, limit: int = 100) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            if status:
+                cur = await db.execute(
+                    "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                    (status, limit),
+                )
+            else:
+                cur = await db.execute(
+                    "SELECT * FROM orders ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
 
+    async def mark_order_paid(self, order_id: int) -> dict | None:
         now = to_iso(utc_now())
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
-                "UPDATE orders SET status='paid', updated_at=? WHERE order_id=?",
+                "UPDATE orders SET status='paid', updated_at=? WHERE order_id=? AND status='pending'",
                 (now, order_id),
             )
             await db.commit()
         return await self.get_order(order_id)
 
     async def mark_order_rejected(self, order_id: int) -> dict | None:
-        order = await self.get_order(order_id)
-        if not order:
-            return None
         now = to_iso(utc_now())
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
-                "UPDATE orders SET status='rejected', updated_at=? WHERE order_id=?",
+                "UPDATE orders SET status='rejected', updated_at=? WHERE order_id=? AND status='pending'",
                 (now, order_id),
             )
             await db.commit()
@@ -355,3 +362,43 @@ class Database:
                 (user_id, lang, now),
             )
             await db.commit()
+
+    async def create_broadcast(self, created_by: int, text: str, target: str) -> int:
+        now = to_iso(utc_now())
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                """
+                INSERT INTO broadcasts(created_at, created_by, text, target, status)
+                VALUES(?,?,?,?,?)
+                """,
+                (now, created_by, text, target, "draft"),
+            )
+            await db.commit()
+            return int(cur.lastrowid)
+
+    async def finish_broadcast(self, broadcast_id: int, ok_count: int, fail_count: int) -> None:
+        now = to_iso(utc_now())
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                UPDATE broadcasts
+                SET status='sent', sent_at=?, ok_count=?, fail_count=?
+                WHERE broadcast_id=?
+                """,
+                (now, int(ok_count), int(fail_count), int(broadcast_id)),
+            )
+            await db.commit()
+
+    async def list_broadcasts(self, limit: int = 20) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT * FROM broadcasts
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]

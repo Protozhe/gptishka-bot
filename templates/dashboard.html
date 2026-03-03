@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="text-muted">Пользователи</div>
+        <div class="h3 mb-0">{{ stats.users }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="text-muted">Заказы</div>
+        <div class="h3 mb-0">{{ stats.orders_total }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="text-muted">Ожидают</div>
+        <div class="h3 mb-0">{{ pending_count }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="text-muted">Выручка</div>
+        <div class="h3 mb-0">{{ stats.revenue_rub }} ₽</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h5 class="card-title">Сводка</h5>
+        <p class="mb-1">Оплачено заказов: <b>{{ stats.paid_count }}</b></p>
+        <p class="mb-1">Подписок в базе: <b>{{ stats.subscriptions }}</b></p>
+        <p class="mb-0">Истекают скоро: <b>{{ expiring_count }}</b></p>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h5 class="card-title">Последние рассылки</h5>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Target</th>
+                <th>OK/FAIL</th>
+                <th>Создана</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in broadcasts %}
+              <tr>
+                <td>{{ b.broadcast_id }}</td>
+                <td>{{ b.target }}</td>
+                <td>{{ b.ok_count }}/{{ b.fail_count }}</td>
+                <td>{{ b.created_at_local }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="text-muted">Пока пусто</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -340,8 +340,6 @@ async def cb_nav(call: CallbackQuery, state: State) -> None:
         new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.SUPPORT_TEXT)
     elif page == "lang":
         new_id = await show_language_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    elif page == "admin":
-        new_id = await show_admin_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
     else:
         await call.answer()
         return
@@ -784,8 +782,8 @@ async def message_text_router(message: Message, state: State) -> None:
                         f"Сумма: {order['amount_rub']} ₽\n"
                         f"Комментарий: {order.get('user_comment') or '-'}\n"
                         f"Создан: {order['created_at']}\n"
+                        "Проверьте заказ в веб-админке."
                     ),
-                    reply_markup=kb.admin_order_kb(order_id),
                 )
             except Exception:
                 log.exception("Failed to notify admin_id=%s", admin_id)
@@ -882,9 +880,6 @@ def build_dispatcher(state: State) -> Dispatcher:
     async def _cmd_start(m: Message) -> None:
         await cmd_start(m, state)
 
-    async def _cmd_admin(m: Message) -> None:
-        await cmd_admin(m, state)
-
     async def _cmd_id(m: Message) -> None:
         await cmd_id(m, state)
 
@@ -900,66 +895,16 @@ def build_dispatcher(state: State) -> Dispatcher:
     async def _cb_lang_set(c: CallbackQuery) -> None:
         await cb_lang_set(c, state)
 
-    async def _cb_admin_stats(c: CallbackQuery) -> None:
-        await cb_admin_stats(c, state)
-
-    async def _cb_admin_pending(c: CallbackQuery) -> None:
-        await cb_admin_pending(c, state)
-
-    async def _cb_admin_expiring(c: CallbackQuery) -> None:
-        await cb_admin_expiring(c, state)
-
-    async def _cb_admin_view(c: CallbackQuery) -> None:
-        await cb_admin_view(c, state)
-
-    async def _cb_admin_grant(c: CallbackQuery) -> None:
-        await cb_admin_grant(c, state)
-
-    async def _cb_admin_grant_plan(c: CallbackQuery) -> None:
-        await cb_admin_grant_plan(c, state)
-
-    async def _cb_admin_grant_cancel(c: CallbackQuery) -> None:
-        await cb_admin_grant_cancel(c, state)
-
-    async def _cb_admin_bcast(c: CallbackQuery) -> None:
-        await cb_admin_bcast(c, state)
-
-    async def _cb_admin_bcast_target(c: CallbackQuery) -> None:
-        await cb_admin_bcast_target(c, state)
-
-    async def _cb_admin_bcast_cancel(c: CallbackQuery) -> None:
-        await cb_admin_bcast_cancel(c, state)
-
-    async def _cb_admin_ok(c: CallbackQuery) -> None:
-        await cb_admin_ok(c, state)
-
-    async def _cb_admin_no(c: CallbackQuery) -> None:
-        await cb_admin_no(c, state)
-
     async def _text_router(m: Message) -> None:
         await message_text_router(m, state)
 
     dp.message.register(_cmd_start, Command("start"))
-    dp.message.register(_cmd_admin, Command("admin"))
     dp.message.register(_cmd_id, Command("id"))
 
     dp.callback_query.register(_cb_nav, F.data.startswith("nav:"))
     dp.callback_query.register(_cb_buy, F.data.startswith("buy:"))
     dp.callback_query.register(_cb_paid, F.data.startswith("paid:"))
     dp.callback_query.register(_cb_lang_set, F.data.startswith("lang:set:"))
-
-    dp.callback_query.register(_cb_admin_stats, F.data == "admin:stats")
-    dp.callback_query.register(_cb_admin_pending, F.data == "admin:pending")
-    dp.callback_query.register(_cb_admin_expiring, F.data == "admin:expiring")
-    dp.callback_query.register(_cb_admin_view, F.data.startswith("admin:view:"))
-    dp.callback_query.register(_cb_admin_grant, F.data == "admin:grant")
-    dp.callback_query.register(_cb_admin_grant_plan, F.data.startswith("admin:grant_plan:"))
-    dp.callback_query.register(_cb_admin_grant_cancel, F.data == "admin:grant_cancel")
-    dp.callback_query.register(_cb_admin_bcast, F.data == "admin:bcast")
-    dp.callback_query.register(_cb_admin_bcast_target, F.data.startswith("admin:bcast_target:"))
-    dp.callback_query.register(_cb_admin_bcast_cancel, F.data == "admin:bcast_cancel")
-    dp.callback_query.register(_cb_admin_ok, F.data.startswith("admin:ok:"))
-    dp.callback_query.register(_cb_admin_no, F.data.startswith("admin:no:"))
 
     dp.message.register(_text_router, F.text)
     return dp

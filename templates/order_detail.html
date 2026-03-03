@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Заказ #{{ order.order_id }}</h4>
+      <a href="/orders" class="btn btn-sm btn-outline-secondary">К списку</a>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <p class="mb-1"><span class="text-muted">User ID:</span> {{ order.user_id }}</p>
+          <p class="mb-1"><span class="text-muted">Тариф:</span> {{ order.plan_name }}</p>
+          <p class="mb-1"><span class="text-muted">Сумма:</span> {{ order.amount_rub }} ₽</p>
+          <p class="mb-1"><span class="text-muted">Статус:</span> {{ order.status_label }}</p>
+          <p class="mb-1"><span class="text-muted">Создан:</span> {{ order.created_local }}</p>
+          <p class="mb-0"><span class="text-muted">Обновлен:</span> {{ order.updated_local }}</p>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100">
+          <div class="text-muted mb-2">Комментарий пользователя</div>
+          <div style="white-space: pre-wrap;">{{ order.user_comment if order.user_comment else "-" }}</div>
+        </div>
+      </div>
+    </div>
+    {% if order.status == "pending" %}
+    <div class="d-flex gap-2 mt-3">
+      <form method="post" action="/orders/{{ order.order_id }}/approve">
+        <button type="submit" class="btn btn-success">Подтвердить</button>
+      </form>
+      <form method="post" action="/orders/{{ order.order_id }}/reject">
+        <button type="submit" class="btn btn-danger">Отклонить</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
