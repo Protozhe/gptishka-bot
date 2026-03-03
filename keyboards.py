@@ -2,6 +2,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 REVIEWS_URL = "https://t.me/otzivigptishkashop"
+SUPPORT_URL = "https://t.me/gptishkasupp"
 
 
 def _l(lang: str, ru: str, en: str) -> str:
@@ -16,7 +17,7 @@ def main_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text=_l(lang, "Отзывы", "Reviews"), url=REVIEWS_URL),
-            InlineKeyboardButton(text=_l(lang, "Поддержка", "Support"), callback_data="nav:support"),
+            InlineKeyboardButton(text=_l(lang, "Поддержка", "Support"), url=SUPPORT_URL),
         ],
         [
             InlineKeyboardButton(text="FAQ", callback_data="nav:faq"),
