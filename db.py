@@ -106,6 +106,15 @@ class Database:
                 )
                 """
             )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id INTEGER PRIMARY KEY,
+                    lang TEXT NOT NULL DEFAULT 'ru',
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
             await db.commit()
 
     async def upsert_user(self, user_id: int, username: str | None, first_name: str | None, last_name: str | None) -> None:
@@ -319,3 +328,30 @@ class Database:
 
             cur = await db.execute("SELECT user_id FROM users")
             return [int(r[0]) for r in await cur.fetchall()]
+
+    async def get_user_lang(self, user_id: int) -> str:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("SELECT lang FROM user_settings WHERE user_id=?", (user_id,))
+            row = await cur.fetchone()
+            if not row:
+                return "ru"
+            lang = (row[0] or "ru").strip().lower()
+            return lang if lang in {"ru", "en"} else "ru"
+
+    async def set_user_lang(self, user_id: int, lang: str) -> None:
+        lang = (lang or "ru").strip().lower()
+        if lang not in {"ru", "en"}:
+            lang = "ru"
+        now = to_iso(utc_now())
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO user_settings(user_id, lang, updated_at)
+                VALUES(?,?,?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    lang=excluded.lang,
+                    updated_at=excluded.updated_at
+                """,
+                (user_id, lang, now),
+            )
+            await db.commit()

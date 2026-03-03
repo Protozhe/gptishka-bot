@@ -104,6 +104,15 @@ def _clear_admin_drafts(state: State, admin_id: int) -> None:
     state.grant_draft.pop(admin_id, None)
 
 
+def _t(lang: str, ru: str, en: str) -> str:
+    return ru if lang == "ru" else en
+
+
+async def _user_lang(state: State, user_id: int) -> str:
+    lang = await state.db.get_user_lang(user_id)
+    return lang if lang in {"ru", "en"} else "ru"
+
+
 async def ui_show(
     *,
     bot: Bot,
@@ -132,39 +141,83 @@ async def ui_show(
 
 
 async def show_shop(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
     return await ui_show(
         bot=bot,
         chat_id=chat_id,
         message_id=message_id,
-        text=texts.SHOP_TEXT,
-        reply_markup=kb.shop_kb(is_admin=_is_admin(state, user_id)),
+        text=texts.MAIN_MENU_TEXT_RU if lang == "ru" else texts.MAIN_MENU_TEXT_EN,
+        reply_markup=kb.main_menu_kb(is_admin=_is_admin(state, user_id), lang=lang),
+    )
+
+
+async def show_buy_menu(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
+    return await ui_show(
+        bot=bot,
+        chat_id=chat_id,
+        message_id=message_id,
+        text=texts.BUY_MENU_TEXT_RU if lang == "ru" else texts.BUY_MENU_TEXT_EN,
+        reply_markup=kb.buy_menu_kb(is_admin=_is_admin(state, user_id), lang=lang),
+    )
+
+
+async def show_products(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
+    return await ui_show(
+        bot=bot,
+        chat_id=chat_id,
+        message_id=message_id,
+        text=texts.PRODUCTS_TEXT_RU if lang == "ru" else texts.PRODUCTS_TEXT_EN,
+        reply_markup=kb.products_kb(lang=lang),
+    )
+
+
+async def show_language_menu(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
+    return await ui_show(
+        bot=bot,
+        chat_id=chat_id,
+        message_id=message_id,
+        text=texts.LANGUAGE_TEXT_RU if lang == "ru" else texts.LANGUAGE_TEXT_EN,
+        reply_markup=kb.language_kb(lang=lang),
     )
 
 
 async def show_subscription(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
     sub = await state.db.get_subscription(user_id)
     if not sub:
-        text = texts.NO_SUBSCRIPTION_TEXT
-        markup = kb.simple_back_kb(is_admin=_is_admin(state, user_id))
+        text = _t(lang, texts.NO_SUBSCRIPTION_TEXT, "No active subscription.")
+        markup = kb.simple_back_kb(is_admin=_is_admin(state, user_id), lang=lang)
     else:
         left = sub["ends_at"] - utc_now()
-        text = texts.SUBSCRIPTION_STATUS_TEMPLATE.format(
-            plan_name=_plan_name(sub["plan_code"]),
-            ends_at=_fmt_dt_local(sub["ends_at"], state.tz),
-            left=_fmt_left(left),
-        )
-        markup = kb.renew_kb(is_admin=_is_admin(state, user_id))
+        if lang == "ru":
+            text = texts.SUBSCRIPTION_STATUS_TEMPLATE.format(
+                plan_name=_plan_name(sub["plan_code"]),
+                ends_at=_fmt_dt_local(sub["ends_at"], state.tz),
+                left=_fmt_left(left),
+            )
+        else:
+            text = (
+                "My subscription:\n\n"
+                f"Plan: {_plan_name(sub['plan_code'])}\n"
+                f"Active until: {_fmt_dt_local(sub['ends_at'], state.tz)}\n"
+                f"Time left: {_fmt_left(left)}\n"
+            )
+        markup = kb.renew_kb(is_admin=_is_admin(state, user_id), lang=lang)
     return await ui_show(bot=bot, chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
 
 
 async def show_admin_menu(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None) -> int:
+    lang = await _user_lang(state, user_id)
     if not _is_admin(state, user_id):
         return await ui_show(
             bot=bot,
             chat_id=chat_id,
             message_id=message_id,
             text=texts.ADMIN_ONLY,
-            reply_markup=kb.simple_back_kb(is_admin=False),
+            reply_markup=kb.simple_back_kb(is_admin=False, lang=lang),
         )
     return await ui_show(
         bot=bot,
@@ -176,12 +229,13 @@ async def show_admin_menu(*, bot: Bot, state: State, user_id: int, chat_id: int,
 
 
 async def show_page(*, bot: Bot, state: State, user_id: int, chat_id: int, message_id: int | None, text: str) -> int:
+    lang = await _user_lang(state, user_id)
     return await ui_show(
         bot=bot,
         chat_id=chat_id,
         message_id=message_id,
         text=text,
-        reply_markup=kb.simple_back_kb(is_admin=_is_admin(state, user_id)),
+        reply_markup=kb.simple_back_kb(is_admin=_is_admin(state, user_id), lang=lang),
     )
 
 
@@ -203,13 +257,14 @@ async def reminders_loop(bot: Bot, state: State) -> None:
                     ends_at=_fmt_dt_local(ends_at, state.tz),
                 )
                 try:
+                    lang = await _user_lang(state, user_id)
                     msg_id = state.menu_message_id.get(user_id)
                     new_id = await ui_show(
                         bot=bot,
                         chat_id=user_id,
                         message_id=msg_id,
                         text=text,
-                        reply_markup=kb.renew_kb(is_admin=_is_admin(state, user_id)),
+                        reply_markup=kb.renew_kb(is_admin=_is_admin(state, user_id), lang=lang),
                     )
                     state.menu_message_id[user_id] = new_id
                     await state.db.mark_reminded(user_id, ends_at)
@@ -267,16 +322,24 @@ async def cb_nav(call: CallbackQuery, state: State) -> None:
 
     if page == "shop":
         new_id = await show_shop(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
+    elif page == "buy":
+        new_id = await show_buy_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
+    elif page == "products":
+        new_id = await show_products(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
     elif page == "sub":
         new_id = await show_subscription(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
     elif page == "faq":
         new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.FAQ_TEXT)
     elif page == "reviews":
         new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.REVIEWS_TEXT)
-    elif page == "terms":
-        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.TERMS_TEXT)
+    elif page in {"terms", "privacy"}:
+        lang = await _user_lang(state, user_id)
+        ptext = texts.PRIVACY_TEXT_RU if lang == "ru" else texts.PRIVACY_TEXT_EN
+        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=ptext)
     elif page == "support":
         new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.SUPPORT_TEXT)
+    elif page == "lang":
+        new_id = await show_language_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
     elif page == "admin":
         new_id = await show_admin_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
     else:
@@ -304,27 +367,38 @@ async def cb_buy(call: CallbackQuery, state: State) -> None:
     order_id = await state.db.create_order(user_id, plan_code)
     plan = PLANS[plan_code]
     created_at = _fmt_dt_local(utc_now(), state.tz)
+    lang = await _user_lang(state, user_id)
 
     payment_link = (
         state.settings.lava_payment_url_template.format(order_id=order_id)
         if state.settings.lava_payment_url_template
-        else "ссылка будет добавлена позже"
+        else _t(lang, "ссылка будет добавлена позже", "link will be added later")
     )
 
-    text = texts.PAYMENT_INSTRUCTIONS_TEMPLATE.format(
-        order_id=order_id,
-        plan_name=plan.name,
-        amount_rub=plan.price_rub,
-        created_at=created_at,
-        payment_link=payment_link,
-    )
+    if lang == "ru":
+        text = texts.PAYMENT_INSTRUCTIONS_TEMPLATE.format(
+            order_id=order_id,
+            plan_name=plan.name,
+            amount_rub=plan.price_rub,
+            created_at=created_at,
+            payment_link=payment_link,
+        )
+    else:
+        text = (
+            f"Order #{order_id}\n"
+            f"Plan: {plan.name}\n"
+            f"Amount: {plan.price_rub} ₽\n"
+            f"Created: {created_at}\n\n"
+            f"Payment (Lava): {payment_link}\n\n"
+            "After payment tap \"I paid\"."
+        )
 
     new_id = await ui_show(
         bot=call.bot,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=text,
-        reply_markup=kb.order_kb(order_id, is_admin=_is_admin(state, user_id)),
+        reply_markup=kb.order_kb(order_id, is_admin=_is_admin(state, user_id), lang=lang),
     )
     state.menu_message_id[user_id] = new_id
     await call.answer()
@@ -338,12 +412,13 @@ async def cb_paid(call: CallbackQuery, state: State) -> None:
         return
 
     user_id = call.from_user.id
+    lang = await _user_lang(state, user_id)
     order = await state.db.get_order(order_id)
     if not order or int(order["user_id"]) != user_id:
-        await call.answer("Заказ не найден", show_alert=True)
+        await call.answer(_t(lang, "Заказ не найден", "Order not found"), show_alert=True)
         return
     if order["status"] != "pending":
-        await call.answer("Заказ уже обработан", show_alert=True)
+        await call.answer(_t(lang, "Заказ уже обработан", "Order already processed"), show_alert=True)
         return
 
     state.awaiting_payment_proof[user_id] = order_id
@@ -351,8 +426,34 @@ async def cb_paid(call: CallbackQuery, state: State) -> None:
         bot=call.bot,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        text=texts.NEED_PAYMENT_PROOF,
-        reply_markup=kb.proof_wait_kb(is_admin=_is_admin(state, user_id)),
+        text=_t(
+            lang,
+            texts.NEED_PAYMENT_PROOF,
+            "Send payment reference/comment in one message so admin can verify your payment.",
+        ),
+        reply_markup=kb.proof_wait_kb(is_admin=_is_admin(state, user_id), lang=lang),
+    )
+    state.menu_message_id[user_id] = new_id
+    await call.answer()
+
+
+async def cb_lang_set(call: CallbackQuery, state: State) -> None:
+    user_id = call.from_user.id
+    parts = call.data.split(":")
+    lang = parts[2] if len(parts) >= 3 else ""
+    if lang not in {"ru", "en"}:
+        await call.answer("Некорректный язык", show_alert=True)
+        return
+
+    await state.db.set_user_lang(user_id, lang)
+    msg = texts.LANGUAGE_CHANGED_RU if lang == "ru" else texts.LANGUAGE_CHANGED_EN
+
+    new_id = await ui_show(
+        bot=call.bot,
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=msg,
+        reply_markup=kb.main_menu_kb(is_admin=_is_admin(state, user_id), lang=lang),
     )
     state.menu_message_id[user_id] = new_id
     await call.answer()
@@ -655,6 +756,7 @@ async def message_text_router(message: Message, state: State) -> None:
         comment = (message.text or "").strip()
         if not comment:
             return
+        lang = await _user_lang(state, user_id)
         await state.db.set_order_user_comment(order_id, comment[:1000])
         state.awaiting_payment_proof.pop(user_id, None)
 
@@ -664,7 +766,7 @@ async def message_text_router(message: Message, state: State) -> None:
             chat_id=message.chat.id,
             message_id=msg_id,
             text=texts.PAYMENT_PROOF_ACCEPTED,
-            reply_markup=kb.simple_back_kb(is_admin=_is_admin(state, user_id)),
+            reply_markup=kb.simple_back_kb(is_admin=_is_admin(state, user_id), lang=lang),
         )
         state.menu_message_id[user_id] = new_id
 
@@ -795,6 +897,9 @@ def build_dispatcher(state: State) -> Dispatcher:
     async def _cb_paid(c: CallbackQuery) -> None:
         await cb_paid(c, state)
 
+    async def _cb_lang_set(c: CallbackQuery) -> None:
+        await cb_lang_set(c, state)
+
     async def _cb_admin_stats(c: CallbackQuery) -> None:
         await cb_admin_stats(c, state)
 
@@ -841,6 +946,7 @@ def build_dispatcher(state: State) -> Dispatcher:
     dp.callback_query.register(_cb_nav, F.data.startswith("nav:"))
     dp.callback_query.register(_cb_buy, F.data.startswith("buy:"))
     dp.callback_query.register(_cb_paid, F.data.startswith("paid:"))
+    dp.callback_query.register(_cb_lang_set, F.data.startswith("lang:set:"))
 
     dp.callback_query.register(_cb_admin_stats, F.data == "admin:stats")
     dp.callback_query.register(_cb_admin_pending, F.data == "admin:pending")

@@ -1,65 +1,103 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def _nav_rows(*, is_admin: bool) -> list[list[InlineKeyboardButton]]:
+def _l(lang: str, ru: str, en: str) -> str:
+    return ru if lang == "ru" else en
+
+
+def main_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton(text="Магазин", callback_data="nav:shop"),
-            InlineKeyboardButton(text="Моя подписка", callback_data="nav:sub"),
+            InlineKeyboardButton(text=_l(lang, "Купить", "Buy"), callback_data="nav:buy"),
+            InlineKeyboardButton(text=_l(lang, "Товары", "Products"), callback_data="nav:products"),
+        ],
+        [
+            InlineKeyboardButton(text=_l(lang, "Отзывы", "Reviews"), callback_data="nav:reviews"),
+            InlineKeyboardButton(text=_l(lang, "Поддержка", "Support"), callback_data="nav:support"),
         ],
         [
             InlineKeyboardButton(text="FAQ", callback_data="nav:faq"),
-            InlineKeyboardButton(text="Отзывы", callback_data="nav:reviews"),
-            InlineKeyboardButton(text="Условия", callback_data="nav:terms"),
+            InlineKeyboardButton(
+                text=_l(lang, "Политика конфиденциальности", "Privacy Policy"),
+                callback_data="nav:privacy",
+            ),
         ],
-        [
-            InlineKeyboardButton(text="Поддержка", callback_data="nav:support"),
-        ],
+        [InlineKeyboardButton(text=_l(lang, "Смена языка", "Change language"), callback_data="nav:lang")],
     ]
     if is_admin:
-        rows.append([InlineKeyboardButton(text="Админка", callback_data="nav:admin")])
-    return rows
-
-
-def shop_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="Купить 1 месяц", callback_data="buy:month")],
-        [InlineKeyboardButton(text="Купить 1 год", callback_data="buy:year")],
-    ]
-    rows.extend(_nav_rows(is_admin=is_admin))
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def order_kb(order_id: int, *, is_admin: bool) -> InlineKeyboardMarkup:
+def buy_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="Я оплатил", callback_data=f"paid:{order_id}")],
-        [InlineKeyboardButton(text="Назад в магазин", callback_data="nav:shop")],
+        [InlineKeyboardButton(text=_l(lang, "Купить 1 месяц", "Buy 1 month"), callback_data="buy:month")],
+        [InlineKeyboardButton(text=_l(lang, "Купить 1 год", "Buy 1 year"), callback_data="buy:year")],
+        [InlineKeyboardButton(text=_l(lang, "Моя подписка", "My subscription"), callback_data="nav:sub")],
+        [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
     ]
-    rows.extend(_nav_rows(is_admin=is_admin))
+    if is_admin:
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def proof_wait_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
+def products_kb(*, lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=_l(lang, "Купить", "Buy"), callback_data="nav:buy")],
+            [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
+        ]
+    )
+
+
+def language_kb(*, lang: str = "ru") -> InlineKeyboardMarkup:
+    ru = "Русский ✅" if lang == "ru" else "Русский"
+    en = "English ✅" if lang == "en" else "English"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=ru, callback_data="lang:set:ru"),
+                InlineKeyboardButton(text=en, callback_data="lang:set:en"),
+            ],
+            [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
+        ]
+    )
+
+
+def order_kb(order_id: int, *, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="Отмена", callback_data="nav:shop")],
+        [InlineKeyboardButton(text=_l(lang, "Я оплатил", "I paid"), callback_data=f"paid:{order_id}")],
+        [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:buy")],
     ]
-    rows.extend(_nav_rows(is_admin=is_admin))
+    if is_admin:
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def renew_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
+def proof_wait_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="Продлить 1 месяц", callback_data="buy:month")],
-        [InlineKeyboardButton(text="Продлить 1 год", callback_data="buy:year")],
-        [InlineKeyboardButton(text="В магазин", callback_data="nav:shop")],
+        [InlineKeyboardButton(text=_l(lang, "Отмена", "Cancel"), callback_data="nav:shop")],
     ]
-    rows.extend(_nav_rows(is_admin=is_admin))
+    if is_admin:
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def simple_back_kb(*, is_admin: bool) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text="Назад в магазин", callback_data="nav:shop")]]
-    rows.extend(_nav_rows(is_admin=is_admin))
+def renew_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=_l(lang, "Продлить 1 месяц", "Renew 1 month"), callback_data="buy:month")],
+        [InlineKeyboardButton(text=_l(lang, "Продлить 1 год", "Renew 1 year"), callback_data="buy:year")],
+        [InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")],
+    ]
+    if is_admin:
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def simple_back_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=_l(lang, "Назад", "Back"), callback_data="nav:shop")]]
+    if is_admin:
+        rows.append([InlineKeyboardButton(text=_l(lang, "Админка", "Admin"), callback_data="nav:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
