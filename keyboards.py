@@ -1,6 +1,9 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
+REVIEWS_URL = "https://t.me/otzivigptishkashop"
+
+
 def _l(lang: str, ru: str, en: str) -> str:
     return ru if lang == "ru" else en
 
@@ -12,7 +15,7 @@ def main_menu_kb(*, is_admin: bool, lang: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=_l(lang, "Товары", "Products"), callback_data="nav:products"),
         ],
         [
-            InlineKeyboardButton(text=_l(lang, "Отзывы", "Reviews"), callback_data="nav:reviews"),
+            InlineKeyboardButton(text=_l(lang, "Отзывы", "Reviews"), url=REVIEWS_URL),
             InlineKeyboardButton(text=_l(lang, "Поддержка", "Support"), callback_data="nav:support"),
         ],
         [
@@ -100,6 +103,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Назад", callback_data="nav:shop")],
         ]
     )
+
 
 def admin_pending_list_kb(order_ids: list[int]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
