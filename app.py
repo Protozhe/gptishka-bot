@@ -398,6 +398,47 @@ async def cmd_id(message: Message, state: State) -> None:
     await message.answer(f"Ваш Telegram ID: `{message.from_user.id}`", parse_mode="Markdown")
 
 
+async def cmd_clear(message: Message, state: State) -> None:
+    u = message.from_user
+    user_id = u.id
+    chat_id = message.chat.id
+
+    old_menu_id = state.menu_message_id.pop(user_id, None)
+    state.awaiting_payment_proof.pop(user_id, None)
+    state.broadcast_draft.pop(user_id, None)
+    state.grant_draft.pop(user_id, None)
+    state.reply_kb_removed_users.discard(user_id)
+
+    await state.db.clear_user_data(user_id)
+
+    if old_menu_id:
+        await _delete_message_safe(message.bot, chat_id, old_menu_id)
+    await _delete_message_safe(message.bot, chat_id, message.message_id)
+
+    await state.db.upsert_user(
+        user_id=u.id,
+        username=u.username,
+        first_name=u.first_name,
+        last_name=u.last_name,
+    )
+
+    try:
+        tmp = await message.answer(" ", reply_markup=ReplyKeyboardRemove())
+        await _delete_message_safe(message.bot, chat_id, tmp.message_id)
+    except Exception:
+        pass
+    state.reply_kb_removed_users.add(user_id)
+
+    new_id = await show_shop(
+        bot=message.bot,
+        state=state,
+        user_id=user_id,
+        chat_id=chat_id,
+        message_id=None,
+    )
+    state.menu_message_id[user_id] = new_id
+
+
 async def cb_nav(call: CallbackQuery, state: State) -> None:
     page = call.data.split(":", 1)[1]
     user_id = call.from_user.id
@@ -998,6 +1039,9 @@ def build_dispatcher(state: State) -> Dispatcher:
     async def _cmd_id(m: Message) -> None:
         await cmd_id(m, state)
 
+    async def _cmd_clear(m: Message) -> None:
+        await cmd_clear(m, state)
+
     async def _cb_nav(c: CallbackQuery) -> None:
         await cb_nav(c, state)
 
@@ -1015,6 +1059,7 @@ def build_dispatcher(state: State) -> Dispatcher:
 
     dp.message.register(_cmd_start, Command("start"))
     dp.message.register(_cmd_id, Command("id"))
+    dp.message.register(_cmd_clear, Command("clear"))
 
     dp.callback_query.register(_cb_nav, F.data.startswith("nav:"))
     dp.callback_query.register(_cb_buy, F.data.startswith("buy:"))

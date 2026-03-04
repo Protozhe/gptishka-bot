@@ -402,3 +402,13 @@ class Database:
             )
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
+
+    async def clear_user_data(self, user_id: int, *, keep_profile: bool = False) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("DELETE FROM remind_log WHERE user_id=?", (user_id,))
+            await db.execute("DELETE FROM user_settings WHERE user_id=?", (user_id,))
+            await db.execute("DELETE FROM subscriptions WHERE user_id=?", (user_id,))
+            await db.execute("DELETE FROM orders WHERE user_id=?", (user_id,))
+            if not keep_profile:
+                await db.execute("DELETE FROM users WHERE user_id=?", (user_id,))
+            await db.commit()
