@@ -107,6 +107,49 @@ def _clear_admin_drafts(state: State, admin_id: int) -> None:
     state.grant_draft.pop(admin_id, None)
 
 
+def _normalize_nav_text(text: str) -> str:
+    s = (text or "").strip().lower().replace("ё", "е")
+    cleaned: list[str] = []
+    for ch in s:
+        if ch.isalnum() or ch.isspace():
+            cleaned.append(ch)
+        else:
+            cleaned.append(" ")
+    return " ".join("".join(cleaned).split())
+
+
+def _legacy_text_to_page(text: str) -> str | None:
+    norm = _normalize_nav_text(text)
+    if not norm:
+        return None
+
+    # Legacy bottom ReplyKeyboard button labels.
+    if norm in {"магазин"}:
+        return "shop"
+    if norm in {"моя подписка", "подписка"}:
+        return "sub"
+    if norm in {"поддержка"}:
+        return "support"
+    if norm in {"купить"}:
+        return "buy"
+    if norm in {"товары"}:
+        return "products"
+    if norm in {"faq"}:
+        return "faq"
+    if norm in {"политика конфиденциальности", "политика"}:
+        return "privacy"
+    if norm in {"смена языка", "язык"}:
+        return "lang"
+    return None
+
+
+async def _delete_message_safe(bot: Bot, chat_id: int, message_id: int) -> None:
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+
+
 def _t(lang: str, ru: str, en: str) -> str:
     return ru if lang == "ru" else en
 
@@ -242,6 +285,46 @@ async def show_page(*, bot: Bot, state: State, user_id: int, chat_id: int, messa
     )
 
 
+async def show_nav_page(
+    *,
+    bot: Bot,
+    state: State,
+    user_id: int,
+    chat_id: int,
+    message_id: int | None,
+    page: str,
+) -> int | None:
+    if page == "shop":
+        return await show_shop(bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id)
+    if page == "buy":
+        return await show_buy_menu(bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id)
+    if page == "products":
+        return await show_products(bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id)
+    if page == "sub":
+        return await show_subscription(bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id)
+    if page == "faq":
+        return await show_page(
+            bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id, text=texts.FAQ_TEXT
+        )
+    if page == "reviews":
+        return await show_page(
+            bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id, text=texts.REVIEWS_TEXT
+        )
+    if page in {"terms", "privacy"}:
+        lang = await _user_lang(state, user_id)
+        ptext = texts.PRIVACY_TEXT_RU if lang == "ru" else texts.PRIVACY_TEXT_EN
+        return await show_page(
+            bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id, text=ptext
+        )
+    if page == "support":
+        return await show_page(
+            bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id, text=texts.SUPPORT_TEXT
+        )
+    if page == "lang":
+        return await show_language_menu(bot=bot, state=state, user_id=user_id, chat_id=chat_id, message_id=message_id)
+    return None
+
+
 async def reminders_loop(bot: Bot, state: State) -> None:
     while True:
         try:
@@ -324,27 +407,15 @@ async def cb_nav(call: CallbackQuery, state: State) -> None:
     if _is_admin(state, user_id):
         _clear_admin_drafts(state, user_id)
 
-    if page == "shop":
-        new_id = await show_shop(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    elif page == "buy":
-        new_id = await show_buy_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    elif page == "products":
-        new_id = await show_products(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    elif page == "sub":
-        new_id = await show_subscription(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    elif page == "faq":
-        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.FAQ_TEXT)
-    elif page == "reviews":
-        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.REVIEWS_TEXT)
-    elif page in {"terms", "privacy"}:
-        lang = await _user_lang(state, user_id)
-        ptext = texts.PRIVACY_TEXT_RU if lang == "ru" else texts.PRIVACY_TEXT_EN
-        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=ptext)
-    elif page == "support":
-        new_id = await show_page(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id, text=texts.SUPPORT_TEXT)
-    elif page == "lang":
-        new_id = await show_language_menu(bot=call.bot, state=state, user_id=user_id, chat_id=chat_id, message_id=msg_id)
-    else:
+    new_id = await show_nav_page(
+        bot=call.bot,
+        state=state,
+        user_id=user_id,
+        chat_id=chat_id,
+        message_id=msg_id,
+        page=page,
+    )
+    if new_id is None:
         await call.answer()
         return
 
@@ -878,7 +949,35 @@ async def message_text_router(message: Message, state: State) -> None:
         state.menu_message_id[user_id] = new_id
         return
 
-    # Fallback: if user writes any text outside active flows, show main menu.
+    # Legacy bottom ReplyKeyboard (text buttons) support:
+    # handle as navigation and clean up user message to avoid chat clutter.
+    page = _legacy_text_to_page(message.text or "")
+
+    if user_id not in state.reply_kb_removed_users:
+        try:
+            tmp = await message.answer(" ", reply_markup=ReplyKeyboardRemove())
+            await _delete_message_safe(message.bot, message.chat.id, tmp.message_id)
+            state.reply_kb_removed_users.add(user_id)
+        except Exception:
+            pass
+
+    await _delete_message_safe(message.bot, message.chat.id, message.message_id)
+
+    if page:
+        msg_id = state.menu_message_id.get(user_id)
+        new_id = await show_nav_page(
+            bot=message.bot,
+            state=state,
+            user_id=user_id,
+            chat_id=message.chat.id,
+            message_id=msg_id,
+            page=page,
+        )
+        if new_id is not None:
+            state.menu_message_id[user_id] = new_id
+            return
+
+    # Fallback: any other text outside active flows -> show main menu.
     msg_id = state.menu_message_id.get(user_id)
     new_id = await show_shop(
         bot=message.bot,
