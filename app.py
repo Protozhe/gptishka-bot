@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import BotCommand, CallbackQuery, Message, ReplyKeyboardRemove
 
 import keyboards as kb
 import texts
@@ -1070,6 +1070,15 @@ def build_dispatcher(state: State) -> Dispatcher:
     return dp
 
 
+async def setup_bot_menu(bot: Bot) -> None:
+    commands = [
+        BotCommand(command="start", description="Open main menu"),
+        BotCommand(command="clear", description="Reset chat state"),
+        BotCommand(command="id", description="Show Telegram ID"),
+    ]
+    await bot.set_my_commands(commands)
+
+
 async def main() -> None:
     settings = load_settings()
     db = Database(settings.db_path)
@@ -1093,6 +1102,7 @@ async def main() -> None:
     )
 
     bot = Bot(token=settings.bot_token)
+    await setup_bot_menu(bot)
     dp = build_dispatcher(state)
 
     asyncio.create_task(reminders_loop(bot, state))
