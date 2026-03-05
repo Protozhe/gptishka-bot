@@ -31,6 +31,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit, auth = true)
   }
 
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as { message?: string };
+      throw new Error(payload?.message || `Ошибка запроса (${response.status})`);
+    }
     const text = await response.text();
     const normalized = text?.trim();
     throw new Error(normalized || `Ошибка запроса (${response.status})`);

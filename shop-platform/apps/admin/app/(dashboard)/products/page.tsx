@@ -21,6 +21,11 @@ const deliveryTypeLabels: Record<string, string> = {
 export default function ProductsPage() {
   const [rows, setRows] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; titleRu: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [canCreate, setCanCreate] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState({
     categoryId: "",
     sku: "",
@@ -44,52 +49,155 @@ export default function ProductsPage() {
   });
 
   const load = async () => {
-    const [products, cats] = await Promise.all([
-      apiFetch<Product[]>("/v1/admin/products"),
-      apiFetch<Array<{ id: string; titleRu: string }>>("/v1/admin/categories")
-    ]);
-    setRows(products);
-    setCategories(cats);
-    if (!form.categoryId && cats[0]) setForm((prev) => ({ ...prev, categoryId: cats[0].id }));
+    setLoading(true);
+    setError(null);
+    try {
+      const products = await apiFetch<Product[]>("/v1/admin/products");
+      setRows(products);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось загрузить товары");
+    }
+
+    try {
+      const cats = await apiFetch<Array<{ id: string; titleRu: string }>>("/v1/admin/categories");
+      setCategories(cats);
+      setCanCreate(true);
+      if (!form.categoryId && cats[0]) setForm((prev) => ({ ...prev, categoryId: cats[0].id }));
+    } catch (e) {
+      setCanCreate(false);
+      setCategories([]);
+      if (!error) {
+        setError(e instanceof Error ? e.message : "Нет доступа к категориям");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
+
+  const handleCreate = async () => {
+    setError(null);
+    setSuccess(null);
+
+    if (!canCreate) {
+      setError("Недостаточно прав для создания товара.");
+      return;
+    }
+
+    const missing = [
+      !form.categoryId && "Категория",
+      form.sku.trim().length < 3 && "SKU",
+      form.slug.trim().length < 3 && "Слаг",
+      form.titleRu.trim().length < 2 && "Название (RU)",
+      form.shortDescriptionRu.trim().length < 2 && "Краткое описание (RU)",
+      form.descriptionRu.trim().length < 2 && "Полное описание (RU)",
+      form.advantagesRu.trim().length < 2 && "Преимущества (RU)",
+      form.activationFormatRu.trim().length < 2 && "Формат активации (RU)",
+      form.guaranteeRu.trim().length < 2 && "Гарантия (RU)",
+      form.durationDays <= 0 && "Срок (дни)",
+      form.priceRub <= 0 && "Цена"
+    ].filter(Boolean) as string[];
+
+    if (missing.length > 0) {
+      setError(`Заполните поля: ${missing.join(", ")}`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        ...form,
+        titleEn: form.titleEn.trim() || form.titleRu.trim(),
+        shortDescriptionEn: form.shortDescriptionEn.trim() || form.shortDescriptionRu.trim(),
+        descriptionEn: form.descriptionEn.trim() || form.descriptionRu.trim(),
+        advantagesEn: form.advantagesEn.trim() || form.advantagesRu.trim(),
+        activationFormatEn: form.activationFormatEn.trim() || form.activationFormatRu.trim(),
+        guaranteeEn: form.guaranteeEn.trim() || form.guaranteeRu.trim(),
+        oldPriceRub: form.oldPriceRub > 0 ? form.oldPriceRub : null,
+        stockCount: 100,
+        isActive: true,
+        sortOrder: 100,
+        requiresManualReview: form.deliveryType === "manual"
+      };
+
+      await apiFetch("/v1/admin/products", { method: "POST", body: JSON.stringify(payload) });
+      setSuccess("Товар успешно создан.");
+      setForm((prev) => ({
+        ...prev,
+        sku: "",
+        slug: "",
+        titleRu: "",
+        titleEn: "",
+        shortDescriptionRu: "",
+        shortDescriptionEn: "",
+        descriptionRu: "",
+        descriptionEn: "",
+        advantagesRu: "",
+        advantagesEn: "",
+        activationFormatRu: "",
+        activationFormatEn: "",
+        guaranteeRu: "",
+        guaranteeEn: "",
+        oldPriceRub: 0
+      }));
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось создать товар");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Создание товара</h3>
+        {!canCreate ? (
+          <div style={{ marginBottom: 12, color: "#fecaca", border: "1px solid rgba(239,68,68,.4)", borderRadius: 10, padding: 10 }}>
+            Недостаточно прав для создания товара (нужна роль admin/superadmin).
+          </div>
+        ) : null}
+        {error ? (
+          <div style={{ marginBottom: 12, color: "#fecaca", border: "1px solid rgba(239,68,68,.4)", borderRadius: 10, padding: 10 }}>
+            {error}
+          </div>
+        ) : null}
+        {success ? (
+          <div style={{ marginBottom: 12, color: "#bbf7d0", border: "1px solid rgba(34,197,94,.4)", borderRadius: 10, padding: 10 }}>
+            {success}
+          </div>
+        ) : null}
         <div className="grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-          <select className="select" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+          <select className="select" value={form.categoryId} disabled={!canCreate || loading} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             {categories.map((category) => <option key={category.id} value={category.id}>{category.titleRu}</option>)}
           </select>
-          <input className="input" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          <input className="input" placeholder="Слаг" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
-          <input className="input" placeholder="Название (RU)" value={form.titleRu} onChange={(e) => setForm({ ...form, titleRu: e.target.value })} />
-          <input className="input" placeholder="Название (EN)" value={form.titleEn} onChange={(e) => setForm({ ...form, titleEn: e.target.value })} />
-          <input className="input" type="number" value={form.priceRub} onChange={(e) => setForm({ ...form, priceRub: Number(e.target.value) })} />
-          <input className="input" placeholder="Краткое описание (RU)" value={form.shortDescriptionRu} onChange={(e) => setForm({ ...form, shortDescriptionRu: e.target.value })} />
-          <input className="input" placeholder="Краткое описание (EN)" value={form.shortDescriptionEn} onChange={(e) => setForm({ ...form, shortDescriptionEn: e.target.value })} />
-          <input className="input" type="number" value={form.oldPriceRub} onChange={(e) => setForm({ ...form, oldPriceRub: Number(e.target.value) })} />
-          <input className="input" placeholder="Полное описание (RU)" value={form.descriptionRu} onChange={(e) => setForm({ ...form, descriptionRu: e.target.value })} />
-          <input className="input" placeholder="Полное описание (EN)" value={form.descriptionEn} onChange={(e) => setForm({ ...form, descriptionEn: e.target.value })} />
-          <select className="select" value={form.deliveryType} onChange={(e) => setForm({ ...form, deliveryType: e.target.value })}>
+          <input className="input" disabled={!canCreate || loading} placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Слаг" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Название (RU)" value={form.titleRu} onChange={(e) => setForm({ ...form, titleRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Название (EN, необязательно)" value={form.titleEn} onChange={(e) => setForm({ ...form, titleEn: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} type="number" value={form.priceRub} onChange={(e) => setForm({ ...form, priceRub: Number(e.target.value) })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Краткое описание (RU)" value={form.shortDescriptionRu} onChange={(e) => setForm({ ...form, shortDescriptionRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Краткое описание (EN, необязательно)" value={form.shortDescriptionEn} onChange={(e) => setForm({ ...form, shortDescriptionEn: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} type="number" value={form.oldPriceRub} onChange={(e) => setForm({ ...form, oldPriceRub: Number(e.target.value) })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Полное описание (RU)" value={form.descriptionRu} onChange={(e) => setForm({ ...form, descriptionRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Полное описание (EN, необязательно)" value={form.descriptionEn} onChange={(e) => setForm({ ...form, descriptionEn: e.target.value })} />
+          <select className="select" disabled={!canCreate || loading} value={form.deliveryType} onChange={(e) => setForm({ ...form, deliveryType: e.target.value })}>
             <option value="inventory">Склад (готовые ключи)</option>
             <option value="instant_token">Мгновенный токен</option>
             <option value="manual">Ручная выдача</option>
           </select>
-          <input className="input" placeholder="Преимущества (RU)" value={form.advantagesRu} onChange={(e) => setForm({ ...form, advantagesRu: e.target.value })} />
-          <input className="input" placeholder="Преимущества (EN)" value={form.advantagesEn} onChange={(e) => setForm({ ...form, advantagesEn: e.target.value })} />
-          <input className="input" placeholder="Формат активации (RU)" value={form.activationFormatRu} onChange={(e) => setForm({ ...form, activationFormatRu: e.target.value })} />
-          <input className="input" placeholder="Формат активации (EN)" value={form.activationFormatEn} onChange={(e) => setForm({ ...form, activationFormatEn: e.target.value })} />
-          <input className="input" placeholder="Гарантия (RU)" value={form.guaranteeRu} onChange={(e) => setForm({ ...form, guaranteeRu: e.target.value })} />
-          <input className="input" placeholder="Гарантия (EN)" value={form.guaranteeEn} onChange={(e) => setForm({ ...form, guaranteeEn: e.target.value })} />
-          <input className="input" type="number" value={form.durationDays} onChange={(e) => setForm({ ...form, durationDays: Number(e.target.value) })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Преимущества (RU)" value={form.advantagesRu} onChange={(e) => setForm({ ...form, advantagesRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Преимущества (EN, необязательно)" value={form.advantagesEn} onChange={(e) => setForm({ ...form, advantagesEn: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Формат активации (RU)" value={form.activationFormatRu} onChange={(e) => setForm({ ...form, activationFormatRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Формат активации (EN, необязательно)" value={form.activationFormatEn} onChange={(e) => setForm({ ...form, activationFormatEn: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Гарантия (RU)" value={form.guaranteeRu} onChange={(e) => setForm({ ...form, guaranteeRu: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Гарантия (EN, необязательно)" value={form.guaranteeEn} onChange={(e) => setForm({ ...form, guaranteeEn: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} type="number" value={form.durationDays} onChange={(e) => setForm({ ...form, durationDays: Number(e.target.value) })} />
         </div>
-        <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={async () => {
-          await apiFetch("/v1/admin/products", { method: "POST", body: JSON.stringify({ ...form, oldPriceRub: form.oldPriceRub || null, stockCount: 100, isActive: true, sortOrder: 100, requiresManualReview: form.deliveryType === "manual" }) });
-          await load();
-        }}>Создать</button>
+        <button className="btn btn-primary" disabled={!canCreate || submitting || loading} style={{ marginTop: 12 }} onClick={handleCreate}>
+          {submitting ? "Создаем..." : "Создать"}
+        </button>
       </div>
 
       <div className="card">
