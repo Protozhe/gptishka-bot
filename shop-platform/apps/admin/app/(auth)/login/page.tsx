@@ -8,6 +8,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("owner@gptishka.local");
   const [password, setPassword] = useState("ChangeMe_123456");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +32,17 @@ export default function LoginPage() {
             <div className="muted" style={{ marginBottom: 6 }}>
               Password
             </div>
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+              <input
+                className="input"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button type="button" className="btn btn-secondary" onClick={() => setShowPassword((v) => !v)}>
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
 
           {error ? (

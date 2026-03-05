@@ -2,7 +2,7 @@
 
 import { clearToken, getToken, setToken } from "./auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+const API_BASE = "/api_proxy";
 
 export async function apiFetch<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const headers = new Headers(init?.headers || {});
