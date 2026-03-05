@@ -63,8 +63,7 @@ export default function ProductsPage() {
     guaranteeEn: "",
     durationDays: 30,
     priceRub: 1499,
-    oldPriceRub: 0,
-    deliveryType: "inventory"
+    oldPriceRub: 0
   });
 
   const load = async () => {
@@ -141,11 +140,12 @@ export default function ProductsPage() {
         stockCount: 100,
         isActive: true,
         sortOrder: 100,
-        requiresManualReview: form.deliveryType === "manual"
+        deliveryType: "inventory",
+        requiresManualReview: false
       };
 
       await apiFetch("/v1/admin/products", { method: "POST", body: JSON.stringify(payload) });
-      setSuccess("Товар успешно создан.");
+      setSuccess("Товар успешно создан. Карточка CDK для него доступна в разделе «CDK ключи».");
       setForm((prev) => ({
         ...prev,
         sku: "",
@@ -205,11 +205,7 @@ export default function ProductsPage() {
           <input className="input" disabled={!canCreate || loading} type="number" value={form.oldPriceRub} onChange={(e) => setForm({ ...form, oldPriceRub: Number(e.target.value) })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Полное описание (RU)" value={form.descriptionRu} onChange={(e) => setForm({ ...form, descriptionRu: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Полное описание (EN, необязательно)" value={form.descriptionEn} onChange={(e) => setForm({ ...form, descriptionEn: e.target.value })} />
-          <select className="select" disabled={!canCreate || loading} value={form.deliveryType} onChange={(e) => setForm({ ...form, deliveryType: e.target.value })}>
-            <option value="inventory">Склад (готовые ключи)</option>
-            <option value="instant_token">Мгновенный токен</option>
-            <option value="manual">Ручная выдача</option>
-          </select>
+          <input className="input" disabled value="Тип выдачи: Склад CDK (карточка ключей создается автоматически)" />
           <input className="input" disabled={!canCreate || loading} placeholder="Преимущества (RU)" value={form.advantagesRu} onChange={(e) => setForm({ ...form, advantagesRu: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Преимущества (EN, необязательно)" value={form.advantagesEn} onChange={(e) => setForm({ ...form, advantagesEn: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Формат активации (RU)" value={form.activationFormatRu} onChange={(e) => setForm({ ...form, activationFormatRu: e.target.value })} />

@@ -26,7 +26,13 @@ function normalizeApiError(raw: string, status: number): string {
 
 export async function apiFetch<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const headers = new Headers(init?.headers || {});
-  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "application/json");
+
+  const body = init?.body;
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body != null && !isFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
   if (auth) {
     const token = getToken();
