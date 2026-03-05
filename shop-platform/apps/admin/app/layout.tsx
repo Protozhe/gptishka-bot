@@ -2,8 +2,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "GPTishka Админка",
-  description: "Админ-панель GPTishka Store"
+  title: {
+    default: "GPTishka Админка",
+    template: "%s | GPTishka Админка"
+  },
+  description: "Админ-панель GPTishka Store",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }]
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -27,26 +27,26 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card" style={{ width: "min(460px, 100%)", padding: 28 }}>
-        <h1 style={{ marginTop: 0 }}>Вход в админку</h1>
-        <p className="muted" style={{ marginTop: -6 }}>
+    <div className="auth-wrap">
+      <div className="card auth-card">
+        <h1>Вход в админку</h1>
+        <p className="muted">
           Безопасный вход в панель управления GPTishka.
         </p>
 
-        <div className="grid" style={{ marginTop: 16 }}>
-          <label>
-            <div className="muted" style={{ marginBottom: 6 }}>
+        <div className="grid auth-grid">
+          <label className="field">
+            <div className="muted field-label">
               Почта
             </div>
             <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
 
-          <label>
-            <div className="muted" style={{ marginBottom: 6 }}>
+          <label className="field">
+            <div className="muted field-label">
               Пароль
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+            <div className="password-row">
               <input
                 className="input"
                 type={showPassword ? "text" : "password"}
