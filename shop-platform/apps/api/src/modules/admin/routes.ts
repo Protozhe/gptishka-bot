@@ -110,7 +110,7 @@ const createAdminSchema = z.object({
 
 const inventoryOverviewQuerySchema = z.object({
   search: z.string().trim().optional(),
-  perProductLimit: z.coerce.number().int().min(5).max(200).default(25)
+  perProductLimit: z.coerce.number().int().min(1).max(200).default(25)
 });
 
 const inventoryUploadSchema = z.object({
