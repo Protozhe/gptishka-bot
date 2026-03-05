@@ -263,6 +263,9 @@ model DeliveryItem {
   isIssued      Boolean   @default(false)
   issuedAt      DateTime?
   issuedOrderId String?   @unique
+  isArchived    Boolean   @default(false)
+  archivedAt    DateTime?
+  archivedBy    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -270,6 +273,18 @@ model DeliveryItem {
   issuedOrder   Order?    @relation("IssuedInventoryItem", fields: [issuedOrderId], references: [id], onDelete: SetNull)
 
   @@index([productId, isIssued, isReserved])
+  @@index([productId, isArchived])
+}
+
+model InventoryBackup {
+  id           String   @id @default(cuid())
+  snapshotDate DateTime @unique
+  snapshot     Json
+  itemCount    Int
+  createdBy    String   @default("system")
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model OrderDelivery {

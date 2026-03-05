@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type AdminRole = "superadmin" | "admin" | "support";
+type InventoryTab = "active" | "archive";
 
 interface InventoryItem {
   id: string;
@@ -35,6 +36,23 @@ interface InventoryCard {
   items: InventoryItem[];
 }
 
+interface ArchiveItem {
+  id: string;
+  secretValue: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  createdAt: string;
+}
+
+interface ArchiveCard {
+  productId: string;
+  sku: string;
+  titleRu: string;
+  isActive: boolean;
+  archivedCount: number;
+  items: ArchiveItem[];
+}
+
 interface UploadResult {
   productId: string;
   productSku: string;
@@ -45,6 +63,14 @@ interface UploadResult {
   duplicatesInStorage: number;
 }
 
+interface BackupRow {
+  id: string;
+  snapshotDate: string;
+  itemCount: number;
+  createdBy: string;
+  createdAt: string;
+}
+
 const statusLabel: Record<InventoryItem["status"], string> = {
   unused: "Неиспользован",
   reserved: "Зарезервирован",
@@ -52,44 +78,67 @@ const statusLabel: Record<InventoryItem["status"], string> = {
 };
 
 export default function CdkPage() {
-  const [cards, setCards] = useState<InventoryCard[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [role, setRole] = useState<AdminRole>("support");
+  const [tab, setTab] = useState<InventoryTab>("active");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCards, setActiveCards] = useState<InventoryCard[]>([]);
+  const [archiveCards, setArchiveCards] = useState<ArchiveCard[]>([]);
+  const [backups, setBackups] = useState<BackupRow[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
+  const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [role, setRole] = useState<AdminRole>("support");
 
   const canUpload = role === "admin" || role === "superadmin";
-  const canDelete = role === "superadmin";
+  const canArchive = role === "admin" || role === "superadmin";
+  const canPurge = role === "admin" || role === "superadmin";
+  const canRestoreBackup = role === "superadmin";
 
-  const load = async () => {
+  const totalStats = useMemo(() => {
+    return activeCards.reduce(
+      (acc, card) => {
+        acc.total += card.counts.total;
+        acc.unused += card.counts.unused;
+        acc.reserved += card.counts.reserved;
+        acc.issued += card.counts.issued;
+        return acc;
+      },
+      { total: 0, unused: 0, reserved: 0, issued: 0 }
+    );
+  }, [activeCards]);
+
+  const loadAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [overview, me] = await Promise.all([
+      const [active, archive, backupsList, me] = await Promise.all([
         apiFetch<InventoryCard[]>(`/v1/admin/inventory/overview?perProductLimit=25${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ""}`),
+        apiFetch<ArchiveCard[]>(`/v1/admin/inventory/archive?perProductLimit=25${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ""}`),
+        apiFetch<BackupRow[]>("/v1/admin/inventory/backups"),
         apiFetch<{ role: AdminRole }>("/v1/admin/auth/me")
       ]);
-      setCards(overview);
+      setActiveCards(active);
+      setArchiveCards(archive);
+      setBackups(backupsList);
       setRole(me.role);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить склад ключей");
+      setError(e instanceof Error ? e.message : "Не удалось загрузить склад CDK.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void loadAll();
   }, [searchQuery]);
 
   const handleUpload = async (card: InventoryCard) => {
     setError(null);
     setSuccess(null);
-
     if (!canUpload) {
       setError("Недостаточно прав для загрузки ключей.");
       return;
@@ -108,41 +157,92 @@ export default function CdkPage() {
         body: JSON.stringify({ keysText })
       });
       setSuccess(
-        `Товар ${result.productSku}: добавлено ${result.added}, дубликаты в партии ${result.duplicatesInBatch}, уже на складе ${result.duplicatesInStorage}.`
+        `Товар ${result.productSku}: добавлено ${result.added}, дубликаты в партии ${result.duplicatesInBatch}, уже существующие ${result.duplicatesInStorage}.`
       );
       setDrafts((prev) => ({ ...prev, [card.productId]: "" }));
-      await load();
+      await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить ключи");
+      setError(e instanceof Error ? e.message : "Не удалось загрузить ключи.");
     } finally {
       setBusyProductId(null);
     }
   };
 
-  const handleDelete = async (card: InventoryCard, item: InventoryItem) => {
+  const handleArchive = async (card: InventoryCard, item: InventoryItem) => {
     setError(null);
     setSuccess(null);
-
-    if (!canDelete) {
-      setError("Удаление ключей доступно только superadmin.");
+    if (!canArchive) {
+      setError("Недостаточно прав для архивации.");
       return;
     }
 
-    const phrase = `DELETE ${item.id}`;
-    const typed = window.prompt(
-      `Удаление необратимо.\nТовар: ${card.titleRu}\nКлюч: ${item.secretValue}\n\nВведите фразу подтверждения:\n${phrase}`
-    );
-    if (!typed) return;
-
+    setBusyItemId(item.id);
     try {
-      await apiFetch(`/v1/admin/inventory/${item.id}/delete`, {
-        method: "POST",
-        body: JSON.stringify({ confirmPhrase: typed })
-      });
-      setSuccess(`Ключ удален из склада (${card.sku}).`);
-      await load();
+      await apiFetch(`/v1/admin/inventory/${item.id}/archive`, { method: "POST" });
+      setSuccess(`Ключ отправлен в архив (${card.sku}).`);
+      await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось удалить ключ");
+      setError(e instanceof Error ? e.message : "Не удалось отправить ключ в архив.");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const handlePurge = async (card: ArchiveCard, item: ArchiveItem) => {
+    setError(null);
+    setSuccess(null);
+    if (!canPurge) {
+      setError("Недостаточно прав для удаления из архива.");
+      return;
+    }
+
+    setBusyItemId(item.id);
+    try {
+      await apiFetch(`/v1/admin/inventory/${item.id}/purge`, { method: "POST" });
+      setSuccess(`Ключ удален из архива (${card.sku}).`);
+      await loadAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось удалить ключ из архива.");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setError(null);
+    setSuccess(null);
+    setBackupBusy(true);
+    try {
+      await apiFetch("/v1/admin/inventory/backups/create", { method: "POST" });
+      setSuccess("Бэкап склада создан.");
+      await loadAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось создать бэкап.");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backup: BackupRow) => {
+    setError(null);
+    setSuccess(null);
+    if (!canRestoreBackup) {
+      setError("Откат бэкапа доступен только superadmin.");
+      return;
+    }
+
+    const ok = window.confirm(`Откатить склад к бэкапу ${new Date(backup.snapshotDate).toLocaleDateString()}?`);
+    if (!ok) return;
+
+    setBackupBusy(true);
+    try {
+      const result = await apiFetch<{ restoredItems: number }>(`/v1/admin/inventory/backups/${backup.id}/restore`, { method: "POST" });
+      setSuccess(`Склад откатан. Восстановлено ключей: ${result.restoredItems}.`);
+      await loadAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось выполнить откат.");
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -151,8 +251,9 @@ export default function CdkPage() {
       <div className="card">
         <h3 style={{ marginTop: 0, marginBottom: 8 }}>CDK ключи по товарам</h3>
         <div className="muted" style={{ marginBottom: 10 }}>
-          Отдельный склад ключей на каждый товар. Автовыдача идет строго из ключей выбранного товара.
+          Склад ключей разделен по товарам. Автовыдача при оплате берет ключ строго из склада выбранного товара.
         </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8 }}>
           <input
             className="input"
@@ -160,9 +261,7 @@ export default function CdkPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setSearchQuery(searchInput.trim());
-              }
+              if (e.key === "Enter") setSearchQuery(searchInput.trim());
             }}
           />
           <button className="btn btn-secondary" onClick={() => setSearchQuery(searchInput.trim())}>
@@ -178,108 +277,212 @@ export default function CdkPage() {
             Сброс
           </button>
         </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button className={`btn ${tab === "active" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTab("active")}>
+            Активный склад
+          </button>
+          <button className={`btn ${tab === "archive" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTab("archive")}>
+            Архив
+          </button>
+        </div>
+
+        <div className="muted" style={{ marginTop: 12, fontSize: 12 }}>
+          Резервное копирование: ежедневно автоматически, хранится 7 последних дней. Доступен ручной бэкап и откат.
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div className="muted" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <span>Всего: {totalStats.total}</span>
+            <span>Неисп.: {totalStats.unused}</span>
+            <span>Резерв: {totalStats.reserved}</span>
+            <span>Выдано: {totalStats.issued}</span>
+          </div>
+          <button className="btn btn-secondary" disabled={backupBusy} onClick={handleCreateBackup}>
+            {backupBusy ? "Обработка..." : "Создать бэкап сейчас"}
+          </button>
+        </div>
+
+        <div className="table-wrap" style={{ marginTop: 12 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Дата бэкапа</th>
+                <th>Ключей</th>
+                <th>Кем создан</th>
+                <th>Создан</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {backups.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Бэкапы не найдены
+                  </td>
+                </tr>
+              ) : (
+                backups.map((backup) => (
+                  <tr key={backup.id}>
+                    <td>{new Date(backup.snapshotDate).toLocaleDateString()}</td>
+                    <td>{backup.itemCount}</td>
+                    <td>{backup.createdBy}</td>
+                    <td>{new Date(backup.createdAt).toLocaleString()}</td>
+                    <td>
+                      <button className="btn btn-secondary" disabled={!canRestoreBackup || backupBusy} onClick={() => handleRestoreBackup(backup)}>
+                        Откатить
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {error ? (
-        <div style={{ color: "#fecaca", border: "1px solid rgba(239,68,68,.4)", borderRadius: 10, padding: 10 }}>
-          {error}
-        </div>
+        <div style={{ color: "#fecaca", border: "1px solid rgba(239,68,68,.4)", borderRadius: 10, padding: 10 }}>{error}</div>
       ) : null}
       {success ? (
-        <div style={{ color: "#bbf7d0", border: "1px solid rgba(34,197,94,.4)", borderRadius: 10, padding: 10 }}>
-          {success}
-        </div>
+        <div style={{ color: "#bbf7d0", border: "1px solid rgba(34,197,94,.4)", borderRadius: 10, padding: 10 }}>{success}</div>
       ) : null}
-
-      {!canDelete ? (
-        <div className="card" style={{ borderColor: "rgba(245,158,11,.35)" }}>
-          <div className="muted">
-            Защита склада: удаление ключей отключено для вашей роли. Удалять ключи может только superadmin и только с фразой подтверждения.
-          </div>
-        </div>
-      ) : null}
-
       {loading ? <div className="card">Загрузка склада ключей...</div> : null}
 
-      <div className="inventory-grid">
-        {cards.map((card) => (
-          <div className="card inventory-card" key={card.productId}>
-            <div className="inventory-card-head">
-              <div>
-                <div className="inventory-title">{card.titleRu}</div>
-                <div className="muted inventory-sub">
-                  {card.sku} {card.isActive ? "" : "· отключен"}
+      {tab === "active" ? (
+        <div className="inventory-grid">
+          {activeCards.map((card) => (
+            <div className="card inventory-card" key={card.productId}>
+              <div className="inventory-card-head">
+                <div>
+                  <div className="inventory-title">{card.titleRu}</div>
+                  <div className="muted inventory-sub">
+                    {card.sku} {card.isActive ? "" : "· отключен"}
+                  </div>
+                </div>
+                <div className="inventory-counts">
+                  <div>Неисп.: {card.counts.unused}</div>
+                  <div>Резерв: {card.counts.reserved}</div>
+                  <div>Выдано: {card.counts.issued}</div>
                 </div>
               </div>
-              <div className="inventory-counts">
-                <div>Неисп.: {card.counts.unused}</div>
-                <div>Резерв: {card.counts.reserved}</div>
-                <div>Выдано: {card.counts.issued}</div>
-              </div>
-            </div>
 
-            <textarea
-              className="textarea"
-              rows={4}
-              placeholder="Вставьте CDK ключи (по одному в строке)"
-              value={drafts[card.productId] || ""}
-              onChange={(e) => setDrafts((prev) => ({ ...prev, [card.productId]: e.target.value }))}
-              disabled={!canUpload || busyProductId === card.productId}
-            />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <button className="btn btn-primary" onClick={() => handleUpload(card)} disabled={!canUpload || busyProductId === card.productId}>
-                {busyProductId === card.productId ? "Загружаем..." : "Загрузить ключи"}
-              </button>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Всего в товаре: {card.counts.total}
+              <textarea
+                className="textarea"
+                rows={4}
+                placeholder="Вставьте CDK ключи (по одному в строке)"
+                value={drafts[card.productId] || ""}
+                onChange={(e) => setDrafts((prev) => ({ ...prev, [card.productId]: e.target.value }))}
+                disabled={!canUpload || busyProductId === card.productId}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <button className="btn btn-primary" onClick={() => handleUpload(card)} disabled={!canUpload || busyProductId === card.productId}>
+                  {busyProductId === card.productId ? "Загружаем..." : "Загрузить ключи"}
+                </button>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Всего в товаре: {card.counts.total}
+                </div>
               </div>
-            </div>
 
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>CDK</th>
-                    <th>Статус</th>
-                    <th>Клиент</th>
-                    <th>Заказ</th>
-                    <th>Дата</th>
-                    <th>Действие</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {card.items.length === 0 ? (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={6} className="muted">
-                        Нет ключей
-                      </td>
+                      <th>CDK</th>
+                      <th>Статус</th>
+                      <th>Клиент</th>
+                      <th>Заказ</th>
+                      <th>Дата</th>
+                      <th>Действие</th>
                     </tr>
-                  ) : (
-                    card.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="mono">{item.secretValue}</td>
-                        <td>{statusLabel[item.status] || item.status}</td>
-                        <td>{item.issuedOrder?.telegramId || "-"}</td>
-                        <td>{item.issuedOrder ? `#${item.issuedOrder.orderNumber}` : "-"}</td>
-                        <td>{new Date(item.issuedAt || item.createdAt).toLocaleString()}</td>
-                        <td>
-                          {item.status === "unused" ? (
-                            <button className="btn btn-secondary" disabled={!canDelete} onClick={() => handleDelete(card, item)}>
-                              Удалить
-                            </button>
-                          ) : (
-                            <span className="muted">-</span>
-                          )}
+                  </thead>
+                  <tbody>
+                    {card.items.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="muted">
+                          Нет ключей
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      card.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="mono">{item.secretValue}</td>
+                          <td>{statusLabel[item.status] || item.status}</td>
+                          <td>{item.issuedOrder?.telegramId || "-"}</td>
+                          <td>{item.issuedOrder ? `#${item.issuedOrder.orderNumber}` : "-"}</td>
+                          <td>{new Date(item.issuedAt || item.createdAt).toLocaleString()}</td>
+                          <td>
+                            {item.status === "unused" ? (
+                              <button className="btn btn-secondary" disabled={!canArchive || busyItemId === item.id} onClick={() => handleArchive(card, item)}>
+                                В архив
+                              </button>
+                            ) : (
+                              <span className="muted">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="inventory-grid">
+          {archiveCards.map((card) => (
+            <div className="card inventory-card" key={card.productId}>
+              <div className="inventory-card-head">
+                <div>
+                  <div className="inventory-title">{card.titleRu}</div>
+                  <div className="muted inventory-sub">{card.sku}</div>
+                </div>
+                <div className="inventory-counts">
+                  <div>В архиве: {card.archivedCount}</div>
+                </div>
+              </div>
+
+              <div className="table-wrap" style={{ marginTop: 8 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>CDK</th>
+                      <th>Архивирован</th>
+                      <th>Кем</th>
+                      <th>Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.items.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="muted">
+                          Архив пуст
+                        </td>
+                      </tr>
+                    ) : (
+                      card.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="mono">{item.secretValue}</td>
+                          <td>{new Date(item.archivedAt || item.createdAt).toLocaleString()}</td>
+                          <td>{item.archivedBy || "-"}</td>
+                          <td>
+                            <button className="btn btn-secondary" disabled={!canPurge || busyItemId === item.id} onClick={() => handlePurge(card, item)}>
+                              Удалить
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

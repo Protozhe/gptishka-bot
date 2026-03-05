@@ -14,6 +14,7 @@ async function issueInventoryToken(prisma: any, orderId: string, productId: stri
     const candidate = await prisma.deliveryItem.findFirst({
       where: {
         productId,
+        isArchived: false,
         isIssued: false,
         OR: [{ isReserved: false }, { reservedUntil: { lt: new Date() } }]
       },
@@ -27,6 +28,7 @@ async function issueInventoryToken(prisma: any, orderId: string, productId: stri
     const lock = await prisma.deliveryItem.updateMany({
       where: {
         id: candidate.id,
+        isArchived: false,
         isIssued: false
       },
       data: {

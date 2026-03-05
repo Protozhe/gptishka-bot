@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { clearToken, getToken, setToken } from "./auth";
 
@@ -53,8 +53,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit, auth = true)
   if (!response.ok) {
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
-      const payload = (await response.json()) as { message?: string };
-      throw new Error(normalizeApiError(payload?.message || "", response.status));
+      const payload = (await response.json()) as { message?: string; error?: string };
+      throw new Error(normalizeApiError(payload?.message || payload?.error || "", response.status));
     }
     const text = await response.text();
     const normalized = text?.trim();

@@ -5,6 +5,7 @@ import { hashPassword } from "../../lib/password";
 import { badRequest, notFound } from "../../lib/http-error";
 import { writeAudit } from "../../lib/audit";
 import { deliverOrder } from "../../services/delivery.service";
+import { createInventoryBackup, listInventoryBackups, restoreInventoryBackup } from "../../services/inventory-backup.service";
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -117,8 +118,9 @@ const inventoryUploadSchema = z.object({
   keysText: z.string().min(1)
 });
 
-const inventoryDeleteSchema = z.object({
-  confirmPhrase: z.string().min(1)
+const inventoryArchiveQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  perProductLimit: z.coerce.number().int().min(1).max(200).default(25)
 });
 
 function paginate(input: z.infer<typeof paginationSchema>) {
@@ -392,6 +394,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
           app.ctx.prisma.deliveryItem.count({
             where: {
               productId: product.id,
+              isArchived: false,
               isIssued: false,
               OR: [{ isReserved: false }, { reservedUntil: { lt: now } }, { reservedUntil: null }]
             }
@@ -399,6 +402,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
           app.ctx.prisma.deliveryItem.count({
             where: {
               productId: product.id,
+              isArchived: false,
               isIssued: false,
               isReserved: true,
               reservedUntil: { gt: now }
@@ -407,10 +411,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
           app.ctx.prisma.deliveryItem.count({
             where: {
               productId: product.id,
+              isArchived: false,
               isIssued: true
             }
           }),
-          app.ctx.prisma.deliveryItem.count({ where: { productId: product.id } })
+          app.ctx.prisma.deliveryItem.count({ where: { productId: product.id, isArchived: false } })
         ]);
 
         const searchFilter = search
@@ -427,6 +432,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
         const items = await app.ctx.prisma.deliveryItem.findMany({
           where: {
             productId: product.id,
+            isArchived: false,
             ...searchFilter
           },
           include: {
@@ -484,6 +490,101 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return cards;
+  });
+
+  app.get("/inventory/archive", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin, AdminRole.support]) }, async (request) => {
+    const query = inventoryArchiveQuerySchema.parse(request.query);
+    const search = query.search?.trim();
+
+    const products = await app.ctx.prisma.product.findMany({
+      where: { deliveryType: DeliveryType.inventory },
+      select: {
+        id: true,
+        sku: true,
+        titleRu: true,
+        isActive: true,
+        sortOrder: true
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }]
+    });
+
+    const cards = await Promise.all(
+      products.map(async (product) => {
+        const archivedCount = await app.ctx.prisma.deliveryItem.count({
+          where: {
+            productId: product.id,
+            isArchived: true
+          }
+        });
+
+        const items = await app.ctx.prisma.deliveryItem.findMany({
+          where: {
+            productId: product.id,
+            isArchived: true,
+            ...(search ? { secretValue: { contains: search, mode: "insensitive" as const } } : {})
+          },
+          orderBy: [{ archivedAt: "desc" }, { createdAt: "desc" }],
+          take: query.perProductLimit
+        });
+
+        return {
+          productId: product.id,
+          sku: product.sku,
+          titleRu: product.titleRu,
+          isActive: product.isActive,
+          archivedCount,
+          items: items.map((item) => ({
+            id: item.id,
+            secretValue: item.secretValue,
+            archivedAt: item.archivedAt,
+            archivedBy: item.archivedBy,
+            createdAt: item.createdAt
+          }))
+        };
+      })
+    );
+
+    return cards.filter((card) => card.archivedCount > 0 || Boolean(search));
+  });
+
+  app.get("/inventory/backups", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin, AdminRole.support]) }, async () => {
+    return listInventoryBackups(app.ctx.prisma, 7);
+  });
+
+  app.post("/inventory/backups/create", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
+    const result = await createInventoryBackup(app.ctx.prisma, {
+      createdBy: request.adminUser?.email || request.adminUser?.id || "admin",
+      force: true
+    });
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.backup.create",
+      resourceType: "inventory_backup",
+      resourceId: result.backup.id,
+      payload: {
+        snapshotDate: result.backup.snapshotDate,
+        itemCount: result.backup.itemCount,
+        createdBy: result.backup.createdBy
+      }
+    });
+
+    return result.backup;
+  });
+
+  app.post("/inventory/backups/:id/restore", { preHandler: app.requireAdmin([AdminRole.superadmin]) }, async (request) => {
+    const { id } = request.params as { id: string };
+    const result = await restoreInventoryBackup(app.ctx.prisma, id);
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.backup.restore",
+      resourceType: "inventory_backup",
+      resourceId: id,
+      payload: result
+    });
+
+    return result;
   });
 
   app.post("/inventory/:productId/upload", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
@@ -566,9 +667,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/inventory/:id/delete", { preHandler: app.requireAdmin([AdminRole.superadmin]) }, async (request) => {
+  app.post("/inventory/:id/archive", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
     const { id } = request.params as { id: string };
-    const body = inventoryDeleteSchema.parse(request.body);
 
     const item = await app.ctx.prisma.deliveryItem.findUnique({
       where: { id },
@@ -579,23 +679,30 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       throw notFound("Ключ не найден");
     }
 
-    const expected = `DELETE ${item.id}`;
-    if (body.confirmPhrase.trim() !== expected) {
-      throw badRequest(`Неверная фраза подтверждения. Введите: ${expected}`);
-    }
-
     if (item.isIssued || item.issuedOrderId) {
-      throw badRequest("Нельзя удалить уже выданный ключ");
+      throw badRequest("Нельзя отправить в архив уже выданный ключ");
     }
     if (item.isReserved && item.reservedUntil && item.reservedUntil > new Date()) {
-      throw badRequest("Нельзя удалить зарезервированный ключ");
+      throw badRequest("Нельзя отправить в архив зарезервированный ключ");
+    }
+    if (item.isArchived) {
+      return { ok: true, alreadyArchived: true };
     }
 
-    await app.ctx.prisma.deliveryItem.delete({ where: { id } });
+    await app.ctx.prisma.deliveryItem.update({
+      where: { id },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
+        archivedBy: request.adminUser?.email || request.adminUser?.id || "admin",
+        isReserved: false,
+        reservedUntil: null
+      }
+    });
 
     await writeAudit(app.ctx.prisma, request, {
       adminUserId: request.adminUser?.id,
-      action: "inventory.delete",
+      action: "inventory.archive",
       resourceType: "inventory",
       resourceId: id,
       payload: {
@@ -607,6 +714,38 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
+  app.post("/inventory/:id/purge", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
+    const { id } = request.params as { id: string };
+    const item = await app.ctx.prisma.deliveryItem.findUnique({
+      where: { id },
+      include: { product: { select: { sku: true, titleRu: true } } }
+    });
+
+    if (!item) {
+      throw notFound("Ключ не найден");
+    }
+    if (!item.isArchived) {
+      throw badRequest("Ключ можно удалить только из архива");
+    }
+    if (item.isIssued || item.issuedOrderId) {
+      throw badRequest("Нельзя удалить уже выданный ключ");
+    }
+
+    await app.ctx.prisma.deliveryItem.delete({ where: { id } });
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.purge",
+      resourceType: "inventory",
+      resourceId: id,
+      payload: {
+        productSku: item.product.sku,
+        secretPreview: `${item.secretValue.slice(0, 4)}...${item.secretValue.slice(-4)}`
+      }
+    });
+
+    return { ok: true };
+  });
   app.get("/orders", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin, AdminRole.support]) }, async (request) => {
     const query = z
       .object({
@@ -1226,3 +1365,4 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 }
+
