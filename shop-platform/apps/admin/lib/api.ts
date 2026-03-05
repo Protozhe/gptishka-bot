@@ -6,6 +6,9 @@ const API_BASE = "/api_proxy";
 
 function normalizeApiError(raw: string, status: number): string {
   const message = (raw || "").toLowerCase();
+  if (message.includes("unique constraint failed")) {
+    return "Такое значение уже существует (дубликат). Измените код или слаг.";
+  }
   if (status === 401 || message.includes("unauthorized") || message.includes("jwt")) {
     return "Сессия истекла. Войдите снова.";
   }

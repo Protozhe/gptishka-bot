@@ -18,6 +18,25 @@ const deliveryTypeLabels: Record<string, string> = {
   manual: "Ручная выдача"
 };
 
+function toSlug(value: string): string {
+  const translitMap: Record<string, string> = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+    к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+    х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya"
+  };
+
+  const normalized = value
+    .toLowerCase()
+    .split("")
+    .map((char) => translitMap[char] ?? char)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+
+  return normalized || "product";
+}
+
 export default function ProductsPage() {
   const [rows, setRows] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; titleRu: string }>>([]);
@@ -87,8 +106,6 @@ export default function ProductsPage() {
 
     const missing = [
       !form.categoryId && "Категория",
-      form.sku.trim().length < 3 && "SKU",
-      form.slug.trim().length < 3 && "Слаг",
       form.titleRu.trim().length < 2 && "Название (RU)",
       form.shortDescriptionRu.trim().length < 2 && "Краткое описание (RU)",
       form.descriptionRu.trim().length < 2 && "Полное описание (RU)",
@@ -106,8 +123,14 @@ export default function ProductsPage() {
 
     setSubmitting(true);
     try {
+      const suffix = Date.now().toString().slice(-6);
+      const generatedSku = form.sku.trim().toUpperCase() || `PRD-${suffix}`;
+      const generatedSlug = form.slug.trim() || `${toSlug(form.titleEn.trim() || form.titleRu.trim())}-${suffix}`;
+
       const payload = {
         ...form,
+        sku: generatedSku,
+        slug: generatedSlug,
         titleEn: form.titleEn.trim() || form.titleRu.trim(),
         shortDescriptionEn: form.shortDescriptionEn.trim() || form.shortDescriptionRu.trim(),
         descriptionEn: form.descriptionEn.trim() || form.descriptionRu.trim(),
@@ -172,8 +195,8 @@ export default function ProductsPage() {
           <select className="select" value={form.categoryId} disabled={!canCreate || loading} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             {categories.map((category) => <option key={category.id} value={category.id}>{category.titleRu}</option>)}
           </select>
-          <input className="input" disabled={!canCreate || loading} placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          <input className="input" disabled={!canCreate || loading} placeholder="Слаг" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="SKU (необязательно, генерируется автоматически)" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+          <input className="input" disabled={!canCreate || loading} placeholder="Слаг (необязательно, генерируется автоматически)" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Название (RU)" value={form.titleRu} onChange={(e) => setForm({ ...form, titleRu: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} placeholder="Название (EN, необязательно)" value={form.titleEn} onChange={(e) => setForm({ ...form, titleEn: e.target.value })} />
           <input className="input" disabled={!canCreate || loading} type="number" value={form.priceRub} onChange={(e) => setForm({ ...form, priceRub: Number(e.target.value) })} />
