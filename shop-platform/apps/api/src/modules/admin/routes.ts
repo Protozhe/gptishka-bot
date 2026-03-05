@@ -429,31 +429,78 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
             }
           : {};
 
-        const items = await app.ctx.prisma.deliveryItem.findMany({
-          where: {
-            productId: product.id,
-            isArchived: false,
-            ...searchFilter
-          },
-          include: {
-            issuedOrder: {
-              select: {
-                id: true,
-                orderNumber: true,
-                createdAt: true,
-                issuedAt: true,
-                user: {
-                  select: {
-                    telegramId: true,
-                    username: true
+        const [unusedItemsRaw, issuedItemsRaw] = await Promise.all([
+          app.ctx.prisma.deliveryItem.findMany({
+            where: {
+              productId: product.id,
+              isArchived: false,
+              isIssued: false,
+              ...searchFilter
+            },
+            include: {
+              issuedOrder: {
+                select: {
+                  id: true,
+                  orderNumber: true,
+                  user: {
+                    select: {
+                      telegramId: true,
+                      username: true
+                    }
                   }
                 }
               }
-            }
-          },
-          orderBy: [{ isIssued: "asc" }, { createdAt: "asc" }],
-          take: query.perProductLimit
+            },
+            orderBy: [{ isReserved: "asc" }, { createdAt: "asc" }],
+            take: query.perProductLimit
+          }),
+          app.ctx.prisma.deliveryItem.findMany({
+            where: {
+              productId: product.id,
+              isArchived: false,
+              isIssued: true,
+              ...searchFilter
+            },
+            include: {
+              issuedOrder: {
+                select: {
+                  id: true,
+                  orderNumber: true,
+                  user: {
+                    select: {
+                      telegramId: true,
+                      username: true
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+            take: query.perProductLimit
+          })
+        ]);
+
+        const toItemView = (item: (typeof unusedItemsRaw)[number] | (typeof issuedItemsRaw)[number]) => ({
+          id: item.id,
+          secretValue: item.secretValue,
+          status: item.isIssued ? "issued" : item.isReserved && item.reservedUntil && item.reservedUntil > now ? "reserved" : "unused",
+          isReserved: item.isReserved,
+          reservedUntil: item.reservedUntil,
+          isIssued: item.isIssued,
+          createdAt: item.createdAt,
+          issuedAt: item.issuedAt,
+          issuedOrder: item.issuedOrder
+            ? {
+                id: item.issuedOrder.id,
+                orderNumber: item.issuedOrder.orderNumber,
+                telegramId: item.issuedOrder.user.telegramId,
+                username: item.issuedOrder.user.username
+              }
+            : null
         });
+
+        const unusedItems = unusedItemsRaw.map(toItemView);
+        const usedItems = issuedItemsRaw.map(toItemView);
 
         return {
           productId: product.id,
@@ -467,24 +514,9 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
             reserved: reservedCount,
             issued: issuedCount
           },
-          items: items.map((item) => ({
-            id: item.id,
-            secretValue: item.secretValue,
-            status: item.isIssued ? "issued" : item.isReserved && item.reservedUntil && item.reservedUntil > now ? "reserved" : "unused",
-            isReserved: item.isReserved,
-            reservedUntil: item.reservedUntil,
-            isIssued: item.isIssued,
-            createdAt: item.createdAt,
-            issuedAt: item.issuedAt,
-            issuedOrder: item.issuedOrder
-              ? {
-                  id: item.issuedOrder.id,
-                  orderNumber: item.issuedOrder.orderNumber,
-                  telegramId: item.issuedOrder.user.telegramId,
-                  username: item.issuedOrder.user.username
-                }
-              : null
-          }))
+          items: [...unusedItems, ...usedItems],
+          unusedItems,
+          usedItems
         };
       })
     );
@@ -714,6 +746,49 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
+  app.post("/inventory/:id/unarchive", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
+    const { id } = request.params as { id: string };
+
+    const item = await app.ctx.prisma.deliveryItem.findUnique({
+      where: { id },
+      include: { product: { select: { sku: true, titleRu: true } } }
+    });
+
+    if (!item) {
+      throw notFound("Ключ не найден");
+    }
+    if (!item.isArchived) {
+      return { ok: true, alreadyActive: true };
+    }
+    if (item.isIssued || item.issuedOrderId) {
+      throw badRequest("Нельзя вернуть в товар уже выданный ключ");
+    }
+
+    await app.ctx.prisma.deliveryItem.update({
+      where: { id },
+      data: {
+        isArchived: false,
+        archivedAt: null,
+        archivedBy: null,
+        isReserved: false,
+        reservedUntil: null
+      }
+    });
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.unarchive",
+      resourceType: "inventory",
+      resourceId: id,
+      payload: {
+        productSku: item.product.sku,
+        secretPreview: `${item.secretValue.slice(0, 4)}...${item.secretValue.slice(-4)}`
+      }
+    });
+
+    return { ok: true };
+  });
+
   app.post("/inventory/:id/purge", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
     const { id } = request.params as { id: string };
     const item = await app.ctx.prisma.deliveryItem.findUnique({
@@ -746,6 +821,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
     return { ok: true };
   });
+
   app.get("/orders", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin, AdminRole.support]) }, async (request) => {
     const query = z
       .object({

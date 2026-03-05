@@ -319,11 +319,21 @@ a:focus-visible {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  align-items: start;
 }
 
 .inventory-card {
   display: grid;
   gap: 10px;
+}
+
+.inventory-card--fixed {
+  min-height: 860px;
+  grid-template-rows: auto auto auto auto 1fr;
+}
+
+.inventory-card--archive {
+  min-height: 430px;
 }
 
 .inventory-card-head {
@@ -349,6 +359,51 @@ a:focus-visible {
   text-align: right;
   font-size: 12px;
   color: var(--muted);
+}
+
+.inventory-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-pill {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-sections {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 0;
+}
+
+.inventory-section {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.inventory-section-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.inventory-table-scroll {
+  max-height: 255px;
+  overflow: auto;
+}
+
+.inventory-actions-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mono {
@@ -403,5 +458,10 @@ a:focus-visible {
 
   .inventory-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inventory-card--fixed,
+  .inventory-card--archive {
+    min-height: auto;
   }
 }
