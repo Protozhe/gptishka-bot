@@ -11,6 +11,7 @@ const navItems: Array<{ href: string; label: string; roles: AdminRole[] }> = [
   { href: "/", label: "Дашборд", roles: ["superadmin", "admin", "support"] },
   { href: "/users", label: "Пользователи", roles: ["superadmin", "admin", "support"] },
   { href: "/products", label: "Товары", roles: ["superadmin", "admin", "support"] },
+  { href: "/cdk", label: "CDK ключи", roles: ["superadmin", "admin", "support"] },
   { href: "/orders", label: "Заказы", roles: ["superadmin", "admin", "support"] },
   { href: "/promocodes", label: "Промокоды", roles: ["superadmin", "admin"] },
   { href: "/reviews", label: "Отзывы", roles: ["superadmin", "admin", "support"] },

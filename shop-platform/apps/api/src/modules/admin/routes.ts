@@ -108,6 +108,19 @@ const createAdminSchema = z.object({
   role: z.nativeEnum(AdminRole)
 });
 
+const inventoryOverviewQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  perProductLimit: z.coerce.number().int().min(5).max(200).default(25)
+});
+
+const inventoryUploadSchema = z.object({
+  keysText: z.string().min(1)
+});
+
+const inventoryDeleteSchema = z.object({
+  confirmPhrase: z.string().min(1)
+});
+
 function paginate(input: z.infer<typeof paginationSchema>) {
   return {
     skip: (input.page - 1) * input.pageSize,
@@ -349,6 +362,246 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       action: "product.delete",
       resourceType: "product",
       resourceId: id
+    });
+
+    return { ok: true };
+  });
+
+  app.get("/inventory/overview", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin, AdminRole.support]) }, async (request) => {
+    const query = inventoryOverviewQuerySchema.parse(request.query);
+    const now = new Date();
+    const search = query.search?.trim();
+    const orderNumberSearch = search && /^\d+$/.test(search) ? Number(search) : null;
+
+    const products = await app.ctx.prisma.product.findMany({
+      where: { deliveryType: DeliveryType.inventory },
+      select: {
+        id: true,
+        sku: true,
+        titleRu: true,
+        titleEn: true,
+        isActive: true,
+        sortOrder: true
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }]
+    });
+
+    const cards = await Promise.all(
+      products.map(async (product) => {
+        const [unusedCount, reservedCount, issuedCount, totalCount] = await Promise.all([
+          app.ctx.prisma.deliveryItem.count({
+            where: {
+              productId: product.id,
+              isIssued: false,
+              OR: [{ isReserved: false }, { reservedUntil: { lt: now } }, { reservedUntil: null }]
+            }
+          }),
+          app.ctx.prisma.deliveryItem.count({
+            where: {
+              productId: product.id,
+              isIssued: false,
+              isReserved: true,
+              reservedUntil: { gt: now }
+            }
+          }),
+          app.ctx.prisma.deliveryItem.count({
+            where: {
+              productId: product.id,
+              isIssued: true
+            }
+          }),
+          app.ctx.prisma.deliveryItem.count({ where: { productId: product.id } })
+        ]);
+
+        const searchFilter = search
+          ? {
+              OR: [
+                { secretValue: { contains: search, mode: "insensitive" as const } },
+                { issuedOrderId: { contains: search, mode: "insensitive" as const } },
+                { issuedOrder: { user: { telegramId: { contains: search } } } },
+                ...(orderNumberSearch ? [{ issuedOrder: { orderNumber: orderNumberSearch } }] : [])
+              ]
+            }
+          : {};
+
+        const items = await app.ctx.prisma.deliveryItem.findMany({
+          where: {
+            productId: product.id,
+            ...searchFilter
+          },
+          include: {
+            issuedOrder: {
+              select: {
+                id: true,
+                orderNumber: true,
+                createdAt: true,
+                issuedAt: true,
+                user: {
+                  select: {
+                    telegramId: true,
+                    username: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: [{ isIssued: "asc" }, { createdAt: "asc" }],
+          take: query.perProductLimit
+        });
+
+        return {
+          productId: product.id,
+          sku: product.sku,
+          titleRu: product.titleRu,
+          titleEn: product.titleEn,
+          isActive: product.isActive,
+          counts: {
+            total: totalCount,
+            unused: unusedCount,
+            reserved: reservedCount,
+            issued: issuedCount
+          },
+          items: items.map((item) => ({
+            id: item.id,
+            secretValue: item.secretValue,
+            status: item.isIssued ? "issued" : item.isReserved && item.reservedUntil && item.reservedUntil > now ? "reserved" : "unused",
+            isReserved: item.isReserved,
+            reservedUntil: item.reservedUntil,
+            isIssued: item.isIssued,
+            createdAt: item.createdAt,
+            issuedAt: item.issuedAt,
+            issuedOrder: item.issuedOrder
+              ? {
+                  id: item.issuedOrder.id,
+                  orderNumber: item.issuedOrder.orderNumber,
+                  telegramId: item.issuedOrder.user.telegramId,
+                  username: item.issuedOrder.user.username
+                }
+              : null
+          }))
+        };
+      })
+    );
+
+    return cards;
+  });
+
+  app.post("/inventory/:productId/upload", { preHandler: app.requireAdmin([AdminRole.superadmin, AdminRole.admin]) }, async (request) => {
+    const { productId } = request.params as { productId: string };
+    const body = inventoryUploadSchema.parse(request.body);
+
+    const product = await app.ctx.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, sku: true, titleRu: true, deliveryType: true }
+    });
+
+    if (!product) {
+      throw notFound("Товар не найден");
+    }
+    if (product.deliveryType !== DeliveryType.inventory) {
+      throw badRequest("Для этого товара не используется склад ключей");
+    }
+
+    const submittedLines = body.keysText
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (submittedLines.length === 0) {
+      throw badRequest("Не найдено ни одного ключа для загрузки");
+    }
+    if (submittedLines.length > 5000) {
+      throw badRequest("Слишком много ключей за один раз. Лимит: 5000");
+    }
+
+    const uniqueLines = [...new Set(submittedLines)];
+    const existing = await app.ctx.prisma.deliveryItem.findMany({
+      where: {
+        productId,
+        secretValue: { in: uniqueLines }
+      },
+      select: { secretValue: true }
+    });
+
+    const existingSet = new Set(existing.map((item) => item.secretValue));
+    const keysToCreate = uniqueLines.filter((value) => !existingSet.has(value));
+
+    if (keysToCreate.length > 0) {
+      await app.ctx.prisma.deliveryItem.createMany({
+        data: keysToCreate.map((secretValue) => ({
+          productId,
+          secretValue,
+          meta: {
+            source: "admin_upload",
+            importedBy: request.adminUser?.email || request.adminUser?.id || "admin",
+            importedAt: new Date().toISOString()
+          }
+        }))
+      });
+    }
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.upload",
+      resourceType: "inventory",
+      resourceId: productId,
+      payload: {
+        productSku: product.sku,
+        submitted: submittedLines.length,
+        unique: uniqueLines.length,
+        added: keysToCreate.length,
+        duplicatesInBatch: submittedLines.length - uniqueLines.length,
+        duplicatesInStorage: uniqueLines.length - keysToCreate.length
+      }
+    });
+
+    return {
+      productId,
+      productSku: product.sku,
+      submitted: submittedLines.length,
+      unique: uniqueLines.length,
+      added: keysToCreate.length,
+      duplicatesInBatch: submittedLines.length - uniqueLines.length,
+      duplicatesInStorage: uniqueLines.length - keysToCreate.length
+    };
+  });
+
+  app.post("/inventory/:id/delete", { preHandler: app.requireAdmin([AdminRole.superadmin]) }, async (request) => {
+    const { id } = request.params as { id: string };
+    const body = inventoryDeleteSchema.parse(request.body);
+
+    const item = await app.ctx.prisma.deliveryItem.findUnique({
+      where: { id },
+      include: { product: { select: { sku: true, titleRu: true } } }
+    });
+
+    if (!item) {
+      throw notFound("Ключ не найден");
+    }
+
+    const expected = `DELETE ${item.id}`;
+    if (body.confirmPhrase.trim() !== expected) {
+      throw badRequest(`Неверная фраза подтверждения. Введите: ${expected}`);
+    }
+
+    if (item.isIssued || item.issuedOrderId) {
+      throw badRequest("Нельзя удалить уже выданный ключ");
+    }
+    if (item.isReserved && item.reservedUntil && item.reservedUntil > new Date()) {
+      throw badRequest("Нельзя удалить зарезервированный ключ");
+    }
+
+    await app.ctx.prisma.deliveryItem.delete({ where: { id } });
+
+    await writeAudit(app.ctx.prisma, request, {
+      adminUserId: request.adminUser?.id,
+      action: "inventory.delete",
+      resourceType: "inventory",
+      resourceId: id,
+      payload: {
+        productSku: item.product.sku,
+        secretPreview: `${item.secretValue.slice(0, 4)}...${item.secretValue.slice(-4)}`
+      }
     });
 
     return { ok: true };
