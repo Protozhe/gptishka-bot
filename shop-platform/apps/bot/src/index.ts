@@ -56,7 +56,7 @@ async function render(
   ctx: BotContext,
   text: string,
   keyboard: InlineKeyboard,
-  options?: { disableWebPreview?: boolean }
+  options?: { disableWebPreview?: boolean; forceNewMessage?: boolean }
 ): Promise<void> {
   const extra = {
     parse_mode: "HTML" as const,
@@ -64,7 +64,7 @@ async function render(
     reply_markup: keyboard
   };
 
-  if (ctx.callbackQuery?.message) {
+  if (!options?.forceNewMessage && ctx.callbackQuery?.message) {
     try {
       await ctx.editMessageText(text, extra);
       ctx.session.menuMessageId = ctx.callbackQuery.message.message_id;
@@ -87,6 +87,54 @@ async function render(
   ctx.session.menuMessageId = message.message_id;
 }
 
+function getAnchorMessageId(ctx: BotContext): number | undefined {
+  if (ctx.callbackQuery?.message?.message_id) return ctx.callbackQuery.message.message_id;
+  if (ctx.message?.message_id) return ctx.message.message_id;
+  return ctx.session.menuMessageId;
+}
+
+async function clearChatHistory(ctx: BotContext, lookback = 300): Promise<void> {
+  if (!ctx.chat?.id) return;
+
+  const anchorMessageId = getAnchorMessageId(ctx);
+  if (!anchorMessageId) return;
+
+  const minMessageId = Math.max(1, anchorMessageId - lookback + 1);
+  const ids: number[] = [];
+  for (let id = anchorMessageId; id >= minMessageId; id -= 1) {
+    ids.push(id);
+  }
+
+  const rawApi = (ctx.api as unknown as { raw?: { deleteMessages?: (chatId: number, messageIds: number[]) => Promise<unknown> } }).raw;
+
+  if (rawApi?.deleteMessages) {
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      try {
+        await rawApi.deleteMessages(ctx.chat.id, chunk);
+      } catch {
+        for (const messageId of chunk) {
+          try {
+            await ctx.api.deleteMessage(ctx.chat.id, messageId);
+          } catch {
+            // ignore deletion errors
+          }
+        }
+      }
+    }
+  } else {
+    for (const messageId of ids) {
+      try {
+        await ctx.api.deleteMessage(ctx.chat.id, messageId);
+      } catch {
+        // ignore deletion errors
+      }
+    }
+  }
+
+  ctx.session.menuMessageId = undefined;
+}
+
 function mainKeyboard(locale: BotLocale): InlineKeyboard {
   const lang = t(locale);
   return new InlineKeyboard()
@@ -99,7 +147,8 @@ function mainKeyboard(locale: BotLocale): InlineKeyboard {
     .text(lang.faq, "menu:faq")
     .text(lang.privacy, "menu:privacy")
     .row()
-    .text(lang.language, "menu:language");
+    .text(lang.language, "menu:language")
+    .text(lang.clearChat, "menu:clear_chat");
 }
 
 function backToMainKeyboard(locale: BotLocale): InlineKeyboard {
@@ -134,11 +183,11 @@ function paymentKeyboard(locale: BotLocale, paymentUrl: string): InlineKeyboard 
     .text(lang.mainMenu, "menu:main");
 }
 
-async function renderMain(ctx: BotContext): Promise<void> {
+async function renderMain(ctx: BotContext, options?: { forceNewMessage?: boolean }): Promise<void> {
   const locale = ctx.session.locale;
   const lang = t(locale);
   const text = `<b>${lang.headline}</b>\n\n${lang.subheadline}\n\n<b>${lang.menuPrompt}</b>`;
-  await render(ctx, text, mainKeyboard(locale));
+  await render(ctx, text, mainKeyboard(locale), { forceNewMessage: options?.forceNewMessage });
 }
 
 async function renderProducts(ctx: BotContext): Promise<void> {
@@ -275,12 +324,12 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("clear", async (ctx) => {
-  const locale = ctx.session.locale;
   ctx.session.awaitingPromoForProductId = undefined;
   ctx.session.promoDraft = undefined;
   ctx.session.supportDraft = undefined;
   await deleteUserMessage(ctx);
-  await render(ctx, t(locale).clearDone, backToMainKeyboard(locale));
+  await clearChatHistory(ctx);
+  await renderMain(ctx, { forceNewMessage: true });
 });
 
 bot.command("id", async (ctx) => {
@@ -331,6 +380,17 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
 
   if (action === "orders") {
     await renderOrders(ctx);
+    return;
+  }
+
+  if (action === "clear_chat") {
+    const locale = ctx.session.locale;
+    ctx.session.awaitingPromoForProductId = undefined;
+    ctx.session.promoDraft = undefined;
+    ctx.session.supportDraft = undefined;
+    await ctx.answerCallbackQuery({ text: t(locale).chatCleared });
+    await clearChatHistory(ctx);
+    await renderMain(ctx, { forceNewMessage: true });
     return;
   }
 
@@ -464,7 +524,7 @@ async function bootstrap() {
   await bot.api.setMyCommands([
     { command: "start", description: "Open main menu" },
     { command: "orders", description: "My orders" },
-    { command: "clear", description: "Reset current flow" },
+    { command: "clear", description: "Clear chat and reset flow" },
     { command: "id", description: "Show Telegram ID" }
   ]);
 
