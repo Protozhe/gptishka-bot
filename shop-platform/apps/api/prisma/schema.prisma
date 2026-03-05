@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Locale {
+  ru
+  en
+}
+
+enum AdminRole {
+  superadmin
+  admin
+  support
+}
+
+enum OrderStatus {
+  created
+  pending_payment
+  paid
+  issued
+  processing
+  canceled
+  error
+  refund
+}
+
+enum PaymentStatus {
+  created
+  pending
+  paid
+  failed
+  canceled
+  refunded
+}
+
+enum DeliveryType {
+  instant_token
+  inventory
+  manual
+}
+
+enum PromoType {
+  percent
+  fixed
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  waiting_user
+  closed
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  critical
+}
+
+model User {
+  id                String         @id @default(cuid())
+  telegramId        String         @unique
+  username          String?
+  firstName         String?
+  lastName          String?
+  locale            Locale         @default(ru)
+  isBlocked         Boolean        @default(false)
+  sourceTag         String?
+  refCode           String?
+  firstStartPayload String?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  orders            Order[]
+  promoUsages       PromoCodeUsage[]
+  tickets           SupportTicket[]
+  supportMessages   SupportMessage[]
+
+  @@index([createdAt])
+}
+
+model AdminUser {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  role          AdminRole  @default(admin)
+  name          String
+  isActive      Boolean    @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  auditLogs     AuditLog[]
+  tickets       SupportTicket[] @relation("SupportAssignee")
+}
+
+model ProductCategory {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  titleRu     String
+  titleEn     String
+  descriptionRu String?
+  descriptionEn String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(100)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id                 String     @id @default(cuid())
+  categoryId         String
+  sku                String     @unique
+  slug               String     @unique
+  titleRu            String
+  titleEn            String
+  shortDescriptionRu String
+  shortDescriptionEn String
+  descriptionRu      String
+  descriptionEn      String
+  advantagesRu       String
+  advantagesEn       String
+  activationFormatRu String
+  activationFormatEn String
+  guaranteeRu        String
+  guaranteeEn        String
+  durationDays       Int
+  priceRub           Int
+  oldPriceRub        Int?
+  isActive           Boolean    @default(true)
+  sortOrder          Int        @default(100)
+  deliveryType       DeliveryType
+  requiresManualReview Boolean @default(false)
+  stockCount         Int?       
+  imageUrl           String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  category           ProductCategory @relation(fields: [categoryId], references: [id])
+  orders             Order[]
+  promoLinks         PromoCodeProduct[]
+  inventoryItems     DeliveryItem[]
+
+  @@index([isActive, sortOrder])
+  @@index([categoryId])
+}
+
+model PromoCode {
+  id                 String      @id @default(cuid())
+  code               String      @unique
+  type               PromoType
+  value              Int
+  isActive           Boolean     @default(true)
+  isOneTime          Boolean     @default(false)
+  onlyNewUsers       Boolean     @default(false)
+  maxActivations     Int?
+  perUserLimit       Int?
+  expiresAt          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  usages             PromoCodeUsage[]
+  products           PromoCodeProduct[]
+  orders             Order[]
+
+  @@index([isActive, expiresAt])
+}
+
+model PromoCodeProduct {
+  promoCodeId String
+  productId   String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, productId])
+}
+
+model PromoCodeUsage {
+  id          String    @id @default(cuid())
+  promoCodeId String
+  userId      String
+  orderId     String?
+  discountAmount Int
+  createdAt   DateTime  @default(now())
+
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([promoCodeId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     Int         @unique @default(autoincrement())
+  userId          String
+  productId       String
+  status          OrderStatus @default(created)
+  currency        String      @default("RUB")
+  amountRub       Int
+  initialAmountRub Int
+  discountAmountRub Int       @default(0)
+  promoCodeId     String?
+  promoCodeText   String?
+  idempotencyKey  String      @unique
+  paymentDueAt    DateTime?
+  paidAt          DateTime?
+  issuedAt        DateTime?
+  errorReason     String?
+  adminComment    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id])
+  product         Product     @relation(fields: [productId], references: [id])
+  promoCode       PromoCode?  @relation(fields: [promoCodeId], references: [id])
+  payment         Payment?
+  delivery        OrderDelivery?
+  promoUsages     PromoCodeUsage[]
+  issuedInventoryItem DeliveryItem? @relation("IssuedInventoryItem")
+  supportTicket   SupportTicket?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([productId])
+}
+
+model Payment {
+  id                String       @id @default(cuid())
+  orderId           String       @unique
+  provider          String
+  providerPaymentId String?
+  status            PaymentStatus @default(created)
+  amountRub         Int
+  payload           Json?
+  paidAt            DateTime?
+  idempotencyKey    String       @unique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([provider, providerPaymentId])
+  @@index([status, createdAt])
+}
+
+model DeliveryItem {
+  id            String    @id @default(cuid())
+  productId     String
+  secretValue   String
+  meta          Json?
+  isReserved    Boolean   @default(false)
+  reservedUntil DateTime?
+  isIssued      Boolean   @default(false)
+  issuedAt      DateTime?
+  issuedOrderId String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  issuedOrder   Order?    @relation("IssuedInventoryItem", fields: [issuedOrderId], references: [id], onDelete: SetNull)
+
+  @@index([productId, isIssued, isReserved])
+}
+
+model OrderDelivery {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  deliveryType   DeliveryType
+  tokenOrContent String?
+  instructionRu  String?
+  instructionEn  String?
+  externalUrl    String?
+  deliveredBy    String   @default("system")
+  deliveredAt    DateTime @default(now())
+
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id             String   @id @default(cuid())
+  authorName     String
+  textRu         String
+  textEn         String?
+  rating         Int      @default(5)
+  isPublished    Boolean  @default(true)
+  isPinned       Boolean  @default(false)
+  sortOrder      Int      @default(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isPublished, isPinned, sortOrder])
+}
+
+model FAQItem {
+  id             String   @id @default(cuid())
+  category       String
+  questionRu     String
+  answerRu       String
+  questionEn     String
+  answerEn       String
+  isPublished    Boolean  @default(true)
+  sortOrder      Int      @default(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isPublished, category, sortOrder])
+}
+
+model SupportTicket {
+  id             String       @id @default(cuid())
+  userId         String
+  orderId        String?      @unique
+  subject        String
+  status         TicketStatus @default(open)
+  priority       TicketPriority @default(normal)
+  assigneeId     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user           User         @relation(fields: [userId], references: [id])
+  order          Order?       @relation(fields: [orderId], references: [id])
+  assignee       AdminUser?   @relation("SupportAssignee", fields: [assigneeId], references: [id])
+  messages       SupportMessage[]
+
+  @@index([status, createdAt])
+  @@index([assigneeId, status])
+}
+
+model SupportMessage {
+  id             String   @id @default(cuid())
+  ticketId       String
+  userId         String?
+  adminUserId    String?
+  body           String
+  isInternal     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  ticket         SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+}
+
+model Setting {
+  id             String   @id @default(cuid())
+  key            String
+  locale         Locale?
+  value          String
+  updatedAt      DateTime @updatedAt
+
+  @@unique([key, locale])
+}
+
+model AuditLog {
+  id             String    @id @default(cuid())
+  adminUserId    String?
+  action         String
+  resourceType   String
+  resourceId     String?
+  payload        Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime  @default(now())
+
+  adminUser      AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}

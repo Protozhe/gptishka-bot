@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@gptishka/config": ["packages/config/src"],
+      "@gptishka/shared": ["packages/shared/src"]
+    }
+  }
+}

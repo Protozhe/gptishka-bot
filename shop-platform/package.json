@@ -1,0 +1,22 @@
+{
+  "name": "gptishka-platform",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @gptishka/api",
+    "dev:api": "npm run dev -w @gptishka/api",
+    "dev:bot": "npm run dev -w @gptishka/bot",
+    "dev:admin": "npm run dev -w @gptishka/admin",
+    "build": "npm run build -ws",
+    "lint": "npm run lint -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "prisma:generate": "npm run prisma:generate -w @gptishka/api",
+    "prisma:migrate": "npm run prisma:migrate -w @gptishka/api",
+    "prisma:seed": "npm run prisma:seed -w @gptishka/api"
+  }
+}

@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gptishka-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gptishka
+      POSTGRES_USER: gptishka
+      POSTGRES_PASSWORD: gptishka
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: gptishka-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://gptishka:gptishka@postgres:5432/gptishka?schema=public
+      DIRECT_URL: postgresql://gptishka:gptishka@postgres:5432/gptishka?schema=public
+      API_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    container_name: gptishka-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: http://api:8080
+    depends_on:
+      - api
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    container_name: gptishka-admin
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
