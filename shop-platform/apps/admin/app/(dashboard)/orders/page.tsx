@@ -29,11 +29,22 @@ const statusLabels: Record<string, string> = {
 export default function OrdersPage() {
   const [rows, setRows] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const load = async () => {
-    const q = statusFilter !== "all" ? `?status=${statusFilter}` : "";
-    const data = await apiFetch<{ items: Order[] }>(`/v1/admin/orders${q}`);
-    setRows(data.items);
+    setLoading(true);
+    setError(null);
+    try {
+      const q = statusFilter !== "all" ? `?status=${statusFilter}` : "";
+      const data = await apiFetch<{ items: Order[] }>(`/v1/admin/orders${q}`);
+      setRows(data.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось загрузить заказы");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [statusFilter]);
@@ -45,8 +56,19 @@ export default function OrdersPage() {
           <option value="all">Все статусы</option>
           {statuses.map((status) => <option key={status} value={status}>{statusLabels[status] || status}</option>)}
         </select>
-        <button className="btn btn-secondary" onClick={load}>Обновить</button>
+        <button className="btn btn-secondary" onClick={load}>{loading ? "Загрузка..." : "Обновить"}</button>
       </div>
+
+      {error ? (
+        <div style={{ marginBottom: 12, color: "#fecaca", border: "1px solid rgba(239,68,68,.4)", borderRadius: 10, padding: 10 }}>
+          {error}
+        </div>
+      ) : null}
+      {success ? (
+        <div style={{ marginBottom: 12, color: "#bbf7d0", border: "1px solid rgba(34,197,94,.4)", borderRadius: 10, padding: 10 }}>
+          {success}
+        </div>
+      ) : null}
 
       <div className="table-wrap">
         <table>
@@ -56,8 +78,28 @@ export default function OrdersPage() {
               <tr key={row.id}>
                 <td>{row.orderNumber}</td><td>{row.user.telegramId}</td><td>{row.product.titleRu}</td><td>{row.amountRub} руб.</td><td>{statusLabels[row.status] || row.status}</td><td>{new Date(row.createdAt).toLocaleString()}</td>
                 <td style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-secondary" onClick={async () => { await apiFetch(`/v1/admin/orders/${row.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "processing" }) }); await load(); }}>В обработку</button>
-                  <button className="btn btn-primary" onClick={async () => { await apiFetch(`/v1/admin/orders/${row.id}/auto-deliver`, { method: "POST" }); await load(); }}>Выдать автоматически</button>
+                  <button className="btn btn-secondary" onClick={async () => {
+                    setError(null);
+                    setSuccess(null);
+                    try {
+                      await apiFetch(`/v1/admin/orders/${row.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "processing" }) });
+                      setSuccess(`Заказ #${row.orderNumber} переведен в обработку.`);
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Не удалось изменить статус заказа");
+                    }
+                  }}>В обработку</button>
+                  <button className="btn btn-primary" onClick={async () => {
+                    setError(null);
+                    setSuccess(null);
+                    try {
+                      await apiFetch(`/v1/admin/orders/${row.id}/auto-deliver`, { method: "POST" });
+                      setSuccess(`Автовыдача заказа #${row.orderNumber} выполнена.`);
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Не удалось выполнить автовыдачу");
+                    }
+                  }}>Выдать автоматически</button>
                 </td>
               </tr>
             ))}

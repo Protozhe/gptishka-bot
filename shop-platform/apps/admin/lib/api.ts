@@ -4,6 +4,23 @@ import { clearToken, getToken, setToken } from "./auth";
 
 const API_BASE = "/api_proxy";
 
+function normalizeApiError(raw: string, status: number): string {
+  const message = (raw || "").toLowerCase();
+  if (status === 401 || message.includes("unauthorized") || message.includes("jwt")) {
+    return "Сессия истекла. Войдите снова.";
+  }
+  if (status === 403 || message.includes("forbidden")) {
+    return "Недостаточно прав для этого действия.";
+  }
+  if (status === 404 || message.includes("not found")) {
+    return "Объект не найден.";
+  }
+  if (status === 400 || message.includes("validation") || message.includes("invalid")) {
+    return raw || "Проверьте корректность заполнения полей.";
+  }
+  return raw || `Ошибка запроса (${status})`;
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
   const headers = new Headers(init?.headers || {});
   headers.set("Content-Type", "application/json");
@@ -34,11 +51,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit, auth = true)
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       const payload = (await response.json()) as { message?: string };
-      throw new Error(payload?.message || `Ошибка запроса (${response.status})`);
+      throw new Error(normalizeApiError(payload?.message || "", response.status));
     }
     const text = await response.text();
     const normalized = text?.trim();
-    throw new Error(normalized || `Ошибка запроса (${response.status})`);
+    throw new Error(normalizeApiError(normalized, response.status));
   }
 
   if (response.status === 204) {

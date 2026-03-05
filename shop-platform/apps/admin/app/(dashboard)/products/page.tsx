@@ -51,11 +51,12 @@ export default function ProductsPage() {
   const load = async () => {
     setLoading(true);
     setError(null);
+    let loadError: string | null = null;
     try {
       const products = await apiFetch<Product[]>("/v1/admin/products");
       setRows(products);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить товары");
+      loadError = e instanceof Error ? e.message : "Не удалось загрузить товары";
     }
 
     try {
@@ -66,10 +67,9 @@ export default function ProductsPage() {
     } catch (e) {
       setCanCreate(false);
       setCategories([]);
-      if (!error) {
-        setError(e instanceof Error ? e.message : "Нет доступа к категориям");
-      }
+      if (!loadError) loadError = e instanceof Error ? e.message : "Нет доступа к категориям";
     } finally {
+      if (loadError) setError(loadError);
       setLoading(false);
     }
   };
@@ -205,7 +205,17 @@ export default function ProductsPage() {
         <div className="table-wrap">
           <table>
             <thead><tr><th>SKU</th><th>Название</th><th>Цена</th><th>Выдача</th><th>Статус</th><th>Действие</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={row.id}><td>{row.sku}</td><td>{row.titleRu}</td><td>{row.priceRub} руб.</td><td>{deliveryTypeLabels[row.deliveryType] || row.deliveryType}</td><td>{row.isActive ? "Активен" : "Отключен"}</td><td><button className="btn btn-secondary" onClick={async () => { await apiFetch(`/v1/admin/products/${row.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !row.isActive }) }); await load(); }}>{row.isActive ? "Отключить" : "Включить"}</button></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={row.id}><td>{row.sku}</td><td>{row.titleRu}</td><td>{row.priceRub} руб.</td><td>{deliveryTypeLabels[row.deliveryType] || row.deliveryType}</td><td>{row.isActive ? "Активен" : "Отключен"}</td><td><button className="btn btn-secondary" onClick={async () => {
+              setError(null);
+              setSuccess(null);
+              try {
+                await apiFetch(`/v1/admin/products/${row.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !row.isActive }) });
+                setSuccess(row.isActive ? "Товар отключен." : "Товар включен.");
+                await load();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Не удалось изменить статус товара");
+              }
+            }}>{row.isActive ? "Отключить" : "Включить"}</button></td></tr>)}</tbody>
           </table>
         </div>
       </div>

@@ -5,17 +5,19 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, logout } from "@/lib/api";
 
-const navItems = [
-  { href: "/", label: "Дашборд" },
-  { href: "/users", label: "Пользователи" },
-  { href: "/products", label: "Товары" },
-  { href: "/orders", label: "Заказы" },
-  { href: "/promocodes", label: "Промокоды" },
-  { href: "/reviews", label: "Отзывы" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/tickets", label: "Тикеты" },
-  { href: "/settings", label: "Настройки" },
-  { href: "/logs", label: "Логи" }
+type AdminRole = "superadmin" | "admin" | "support";
+
+const navItems: Array<{ href: string; label: string; roles: AdminRole[] }> = [
+  { href: "/", label: "Дашборд", roles: ["superadmin", "admin", "support"] },
+  { href: "/users", label: "Пользователи", roles: ["superadmin", "admin", "support"] },
+  { href: "/products", label: "Товары", roles: ["superadmin", "admin", "support"] },
+  { href: "/orders", label: "Заказы", roles: ["superadmin", "admin", "support"] },
+  { href: "/promocodes", label: "Промокоды", roles: ["superadmin", "admin"] },
+  { href: "/reviews", label: "Отзывы", roles: ["superadmin", "admin", "support"] },
+  { href: "/faq", label: "FAQ", roles: ["superadmin", "admin", "support"] },
+  { href: "/tickets", label: "Тикеты", roles: ["superadmin", "admin", "support"] },
+  { href: "/settings", label: "Настройки", roles: ["superadmin", "admin"] },
+  { href: "/logs", label: "Логи", roles: ["superadmin", "admin"] }
 ];
 
 const roleMap: Record<string, string> = {
@@ -27,16 +29,20 @@ const roleMap: Record<string, string> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [me, setMe] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [me, setMe] = useState<{ name: string; email: string; role: AdminRole } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<{ name: string; email: string; role: string }>("/v1/admin/auth/me")
+    apiFetch<{ name: string; email: string; role: AdminRole }>("/v1/admin/auth/me")
       .then((value) => setMe(value))
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);
 
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => (me?.role ? item.roles.includes(me.role) : true)),
+    [me?.role]
+  );
   const title = useMemo(() => navItems.find((item) => item.href === pathname)?.label || "Панель", [pathname]);
 
   if (loading) {
@@ -61,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ display: "grid", gap: 8 }}>
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
