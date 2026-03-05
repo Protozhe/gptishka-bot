@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { clearToken, getToken, setToken } from "./auth";
 
@@ -27,12 +27,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit, auth = true)
       return apiFetch(path, init, auth);
     }
     clearToken();
-    throw new Error("Unauthorized");
+    throw new Error("Сессия истекла. Войдите снова.");
   }
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed ${response.status}`);
+    const normalized = text?.trim();
+    throw new Error(normalized || `Ошибка запроса (${response.status})`);
   }
 
   if (response.status === 204) {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -6,17 +6,23 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch, logout } from "@/lib/api";
 
 const navItems = [
-  { href: "/", label: "Dashboard" },
-  { href: "/users", label: "Users" },
-  { href: "/products", label: "Products" },
-  { href: "/orders", label: "Orders" },
-  { href: "/promocodes", label: "Promo codes" },
-  { href: "/reviews", label: "Reviews" },
+  { href: "/", label: "Дашборд" },
+  { href: "/users", label: "Пользователи" },
+  { href: "/products", label: "Товары" },
+  { href: "/orders", label: "Заказы" },
+  { href: "/promocodes", label: "Промокоды" },
+  { href: "/reviews", label: "Отзывы" },
   { href: "/faq", label: "FAQ" },
-  { href: "/tickets", label: "Tickets" },
-  { href: "/settings", label: "Settings" },
-  { href: "/logs", label: "Logs" }
+  { href: "/tickets", label: "Тикеты" },
+  { href: "/settings", label: "Настройки" },
+  { href: "/logs", label: "Логи" }
 ];
+
+const roleMap: Record<string, string> = {
+  superadmin: "Суперадмин",
+  admin: "Админ",
+  support: "Поддержка"
+};
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,10 +37,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const title = useMemo(() => navItems.find((item) => item.href === pathname)?.label || "Panel", [pathname]);
+  const title = useMemo(() => navItems.find((item) => item.href === pathname)?.label || "Панель", [pathname]);
 
   if (loading) {
-    return <div style={{ padding: 24 }}>Loading...</div>;
+    return <div style={{ padding: 24 }}>Загрузка...</div>;
   }
 
   return (
@@ -49,9 +55,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           height: "100vh"
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 16 }}>GPTishka Admin</div>
+        <div style={{ fontWeight: 800, marginBottom: 16 }}>GPTishka Админка</div>
         <div className="muted" style={{ marginBottom: 24, fontSize: 13 }}>
-          {me?.name} ({me?.role})
+          {me?.name} ({me?.role ? roleMap[me.role] || me.role : ""})
         </div>
 
         <nav style={{ display: "grid", gap: 8 }}>
@@ -79,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             router.replace("/login");
           }}
         >
-          Logout
+          Выйти
         </button>
       </aside>
 

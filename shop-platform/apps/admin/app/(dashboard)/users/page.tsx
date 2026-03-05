@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -31,13 +31,13 @@ export default function UsersPage() {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>Users</h3>
-        <button className="btn btn-secondary" onClick={load}>{loading ? "Loading..." : "Refresh"}</button>
+        <h3 style={{ margin: 0 }}>Пользователи</h3>
+        <button className="btn btn-secondary" onClick={load}>{loading ? "Загрузка..." : "Обновить"}</button>
       </div>
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Telegram ID</th><th>Username</th><th>Lang</th><th>Orders</th><th>Spent</th><th>Status</th><th>Action</th></tr>
+            <tr><th>Telegram ID</th><th>Ник</th><th>Язык</th><th>Заказы</th><th>Потрачено</th><th>Статус</th><th>Действие</th></tr>
           </thead>
           <tbody>
             {rows.map((row) => (
@@ -46,13 +46,13 @@ export default function UsersPage() {
                 <td>{row.username || "-"}</td>
                 <td>{row.locale}</td>
                 <td>{row.ordersCount}</td>
-                <td>{row.totalSpent} ₽</td>
-                <td>{row.isBlocked ? "Blocked" : "Active"}</td>
+                <td>{row.totalSpent} руб.</td>
+                <td>{row.isBlocked ? "Заблокирован" : "Активен"}</td>
                 <td>
                   <button className="btn btn-secondary" onClick={async () => {
                     await apiFetch(`/v1/admin/users/${row.id}`, { method: "PATCH", body: JSON.stringify({ isBlocked: !row.isBlocked }) });
                     await load();
-                  }}>{row.isBlocked ? "Unblock" : "Block"}</button>
+                  }}>{row.isBlocked ? "Разблокировать" : "Заблокировать"}</button>
                 </td>
               </tr>
             ))}

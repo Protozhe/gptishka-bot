@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -21,11 +21,11 @@ export default function LogsPage() {
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Audit logs</h3>
+      <h3 style={{ marginTop: 0 }}>Журнал аудита</h3>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Time</th><th>Admin</th><th>Action</th><th>Resource</th><th>ID</th></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString()}</td><td>{row.adminUser?.email || "system"}</td><td>{row.action}</td><td>{row.resourceType}</td><td>{row.resourceId || "-"}</td></tr>)}</tbody>
+          <thead><tr><th>Время</th><th>Администратор</th><th>Действие</th><th>Ресурс</th><th>ID</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.id}><td>{new Date(row.createdAt).toLocaleString()}</td><td>{row.adminUser?.email || "система"}</td><td>{row.action}</td><td>{row.resourceType}</td><td>{row.resourceId || "-"}</td></tr>)}</tbody>
         </table>
       </div>
     </div>
