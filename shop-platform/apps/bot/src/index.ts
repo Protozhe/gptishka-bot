@@ -28,6 +28,7 @@ type BotContext = Context & SessionFlavor<SessionData>;
 const env = loadBotEnv(process.env);
 const api = new ApiClient(env.API_BASE_URL);
 const bot = new Bot<BotContext>(env.BOT_TOKEN);
+const TELEGRAM_TEXT_LIMIT = 3900;
 
 bot.use(
   session({
@@ -133,6 +134,98 @@ async function clearChatHistory(ctx: BotContext, lookback = 300): Promise<void> 
   }
 
   ctx.session.menuMessageId = undefined;
+}
+
+function splitLongText(text: string, maxLength = TELEGRAM_TEXT_LIMIT): string[] {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (normalized.length <= maxLength) {
+    return [normalized];
+  }
+
+  const chunks: string[] = [];
+  let current = "";
+  const lines = normalized.split("\n");
+
+  const pushCurrent = () => {
+    const value = current.trim();
+    if (value) chunks.push(value);
+    current = "";
+  };
+
+  for (const line of lines) {
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) {
+      pushCurrent();
+    }
+
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+
+    let rest = line;
+    while (rest.length > maxLength) {
+      const slice = rest.slice(0, maxLength);
+      const splitBySpace = slice.lastIndexOf(" ");
+      const splitIndex = splitBySpace > Math.floor(maxLength * 0.5) ? splitBySpace : maxLength;
+      chunks.push(rest.slice(0, splitIndex).trim());
+      rest = rest.slice(splitIndex).trimStart();
+    }
+    current = rest;
+  }
+
+  if (current) {
+    pushCurrent();
+  }
+
+  return chunks.length > 0 ? chunks : [normalized];
+}
+
+async function renderLong(
+  ctx: BotContext,
+  text: string,
+  keyboard: InlineKeyboard,
+  options?: { disableWebPreview?: boolean }
+): Promise<void> {
+  const parts = splitLongText(text);
+  if (parts.length <= 1) {
+    await render(ctx, text, keyboard, options);
+    return;
+  }
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.answerCallbackQuery();
+    } catch {
+      // ignore
+    }
+  }
+
+  if (ctx.chat?.id && ctx.session.menuMessageId) {
+    try {
+      await ctx.api.deleteMessage(ctx.chat.id, ctx.session.menuMessageId);
+    } catch {
+      // ignore
+    }
+  }
+  ctx.session.menuMessageId = undefined;
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const isLast = i === parts.length - 1;
+    const sent = await ctx.reply(parts[i], {
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: options?.disableWebPreview ?? true },
+      reply_markup: isLast ? keyboard : undefined
+    });
+    if (isLast) {
+      ctx.session.menuMessageId = sent.message_id;
+    }
+  }
 }
 
 function mainKeyboard(locale: BotLocale): InlineKeyboard {
@@ -276,7 +369,7 @@ async function renderFaq(ctx: BotContext): Promise<void> {
 async function renderPrivacy(ctx: BotContext): Promise<void> {
   const locale = ctx.session.locale;
   const privacy = await api.getPrivacy(locale);
-  await render(ctx, `<b>${t(locale).privacyTitle}</b>\n\n${privacy.text}`, backToMainKeyboard(locale));
+  await renderLong(ctx, `<b>${t(locale).privacyTitle}</b>\n\n${privacy.text}`, backToMainKeyboard(locale));
 }
 
 async function renderSupport(ctx: BotContext): Promise<void> {
