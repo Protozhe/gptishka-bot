@@ -78,12 +78,12 @@ export async function registerBotRoutes(app: FastifyInstance): Promise<void> {
       hero: {
         title: textByLocale(
           user.locale,
-          "Подключение и продление ChatGPT за несколько минут",
+          "Добро пожаловать в сервис активации ChatGPT GPTишка",
           "ChatGPT activation and renewal in minutes"
         ),
         subtitle: textByLocale(
           user.locale,
-          "Быстрая активация подписки без лишних действий. Удобно, безопасно и с поддержкой на каждом этапе.",
+          "Подключение и продление подписки занимает всего несколько минут.\nБез сложных действий, всё работает автоматически.",
           "Fast subscription activation with no extra steps. Convenient, secure, and supported end-to-end."
         )
       },
