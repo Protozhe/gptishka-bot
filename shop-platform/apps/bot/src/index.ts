@@ -38,6 +38,11 @@ bot.use(
   })
 );
 
+bot.callbackQuery(/.*/, async (ctx, next) => {
+  await answerCallbackFast(ctx);
+  await next();
+});
+
 function getStartPayload(text?: string): string | undefined {
   if (!text) return undefined;
   const parts = text.trim().split(/\s+/);
@@ -69,7 +74,6 @@ async function render(
     try {
       await ctx.editMessageText(text, extra);
       ctx.session.menuMessageId = ctx.callbackQuery.message.message_id;
-      await ctx.answerCallbackQuery();
       return;
     } catch {
       // fallback below
@@ -86,6 +90,15 @@ async function render(
 
   const message = await ctx.reply(text, extra);
   ctx.session.menuMessageId = message.message_id;
+}
+
+async function answerCallbackFast(ctx: BotContext): Promise<void> {
+  if (!ctx.callbackQuery) return;
+  try {
+    await ctx.answerCallbackQuery();
+  } catch {
+    // ignore duplicate/expired callback answers
+  }
 }
 
 function getAnchorMessageId(ctx: BotContext): number | undefined {
@@ -196,14 +209,6 @@ async function renderLong(
   if (parts.length <= 1) {
     await render(ctx, text, keyboard, options);
     return;
-  }
-
-  if (ctx.callbackQuery) {
-    try {
-      await ctx.answerCallbackQuery();
-    } catch {
-      // ignore
-    }
   }
 
   if (ctx.chat?.id && ctx.session.menuMessageId) {
@@ -477,17 +482,13 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
   }
 
   if (action === "clear_chat") {
-    const locale = ctx.session.locale;
     ctx.session.awaitingPromoForProductId = undefined;
     ctx.session.promoDraft = undefined;
     ctx.session.supportDraft = undefined;
-    await ctx.answerCallbackQuery({ text: t(locale).chatCleared });
     await clearChatHistory(ctx);
     await renderMain(ctx, { forceNewMessage: true });
     return;
   }
-
-  await ctx.answerCallbackQuery();
 });
 
 bot.callbackQuery(/^pv:(.+)$/, async (ctx) => {

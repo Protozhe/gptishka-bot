@@ -23,16 +23,54 @@ export interface BotOrder {
 }
 
 export class ApiClient {
+  private readonly cache = new Map<string, { expiresAt: number; value: unknown }>();
+  private readonly inFlight = new Map<string, Promise<unknown>>();
+
   constructor(private readonly baseUrl: string) {}
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options?.headers || {})
-      }
+  private getCached<T>(key: string): T | undefined {
+    const cached = this.cache.get(key);
+    if (!cached) return undefined;
+    if (cached.expiresAt <= Date.now()) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return cached.value as T;
+  }
+
+  private setCached<T>(key: string, value: T, ttlMs: number): void {
+    if (ttlMs <= 0) return;
+    this.cache.set(key, {
+      expiresAt: Date.now() + ttlMs,
+      value
     });
+  }
+
+  private async request<T>(path: string, options?: RequestInit, timeoutMs = 8000): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const headers = new Headers(options?.headers || {});
+    headers.set("Accept", "application/json");
+    if (options?.body != null && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers,
+        signal: controller.signal
+      });
+    } catch (error) {
+      if ((error as { name?: string })?.name === "AbortError") {
+        throw new Error("Request timeout");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -40,6 +78,30 @@ export class ApiClient {
     }
 
     return (await response.json()) as T;
+  }
+
+  private async requestCached<T>(key: string, path: string, ttlMs: number): Promise<T> {
+    const cached = this.getCached<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const pending = this.inFlight.get(key) as Promise<T> | undefined;
+    if (pending) {
+      return pending;
+    }
+
+    const promise = this.request<T>(path)
+      .then((value) => {
+        this.setCached(key, value, ttlMs);
+        return value;
+      })
+      .finally(() => {
+        this.inFlight.delete(key);
+      });
+
+    this.inFlight.set(key, promise);
+    return promise;
   }
 
   start(payload: {
@@ -68,11 +130,11 @@ export class ApiClient {
   }
 
   getProducts(locale: BotLocale) {
-    return this.request<BotProduct[]>(`/v1/bot/products?locale=${locale}`);
+    return this.requestCached<BotProduct[]>(`products:${locale}`, `/v1/bot/products?locale=${locale}`, 15_000);
   }
 
   getProduct(id: string, locale: BotLocale) {
-    return this.request<{
+    return this.requestCached<{
       id: string;
       name: string;
       description: string;
@@ -87,7 +149,7 @@ export class ApiClient {
         pay: string;
         back: string;
       };
-    }>(`/v1/bot/products/${id}?locale=${locale}`);
+    }>(`product:${id}:${locale}`, `/v1/bot/products/${id}?locale=${locale}`, 15_000);
   }
 
   validatePromo(payload: { telegramId: string; productId: string; promoCode: string }) {
@@ -134,23 +196,27 @@ export class ApiClient {
   }
 
   getReviews(locale: BotLocale) {
-    return this.request<Array<{ id: string; authorName: string; text: string; rating: number; pinned: boolean }>>(
-      `/v1/bot/reviews?locale=${locale}`
+    return this.requestCached<Array<{ id: string; authorName: string; text: string; rating: number; pinned: boolean }>>(
+      `reviews:${locale}`,
+      `/v1/bot/reviews?locale=${locale}`,
+      45_000
     );
   }
 
   getFaq(locale: BotLocale) {
-    return this.request<Array<{ id: string; category: string; question: string; answer: string }>>(
-      `/v1/bot/faq?locale=${locale}`
+    return this.requestCached<Array<{ id: string; category: string; question: string; answer: string }>>(
+      `faq:${locale}`,
+      `/v1/bot/faq?locale=${locale}`,
+      45_000
     );
   }
 
   getPrivacy(locale: BotLocale) {
-    return this.request<{ text: string }>(`/v1/bot/privacy?locale=${locale}`);
+    return this.requestCached<{ text: string }>(`privacy:${locale}`, `/v1/bot/privacy?locale=${locale}`, 300_000);
   }
 
   getSupportLink(locale: BotLocale) {
-    return this.request<{ link: string }>(`/v1/bot/support/link?locale=${locale}`);
+    return this.requestCached<{ link: string }>(`support-link:${locale}`, `/v1/bot/support/link?locale=${locale}`, 300_000);
   }
 
   createSupportTicket(payload: { telegramId: string; subject: string; message: string; orderId?: string }) {
