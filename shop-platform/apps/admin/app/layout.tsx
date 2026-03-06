@@ -7,6 +7,9 @@ export const metadata: Metadata = {
     template: "%s | GPTishka Админка"
   },
   description: "Админ-панель GPTishka Store",
+  other: {
+    "lava-verify": "ae5543f7d342311a"
+  },
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }]
   }
