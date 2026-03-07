@@ -76,9 +76,9 @@ interface BackupRow {
 }
 
 const statusLabel: Record<InventoryItem["status"], string> = {
-  unused: "РќРµРёСЃРїРѕР»СЊР·РѕРІР°РЅ",
-  reserved: "Р—Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅ",
-  issued: "РСЃРїРѕР»СЊР·РѕРІР°РЅ"
+  unused: "Неиспользован",
+  reserved: "Зарезервирован",
+  issued: "Использован"
 };
 
 function formatDate(value?: string | null): string {
@@ -148,7 +148,7 @@ export default function CdkPage() {
       setBackups(backupsList);
       setRole(me.role);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРєР»Р°Рґ CDK.");
+      setError(e instanceof Error ? e.message : "Не удалось загрузить склад CDK.");
     } finally {
       setLoading(false);
     }
@@ -162,13 +162,13 @@ export default function CdkPage() {
     setError(null);
     setSuccess(null);
     if (!canUpload) {
-      setError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ Р·Р°РіСЂСѓР·РєРё РєР»СЋС‡РµР№.");
+      setError("Недостаточно прав для загрузки ключей.");
       return;
     }
 
     const keysText = drafts[card.productId]?.trim();
     if (!keysText) {
-      setError(`Р’РІРµРґРёС‚Рµ РєР»СЋС‡Рё РґР»СЏ С‚РѕРІР°СЂР° ${card.titleRu}.`);
+      setError(`Введите ключи для товара ${card.titleRu}.`);
       return;
     }
 
@@ -179,12 +179,12 @@ export default function CdkPage() {
         body: JSON.stringify({ keysText })
       });
       setSuccess(
-        `РўРѕРІР°СЂ ${result.productSku}: РґРѕР±Р°РІР»РµРЅРѕ ${result.added}, РґСѓР±Р»РёРєР°С‚С‹ РІ РїР°СЂС‚РёРё ${result.duplicatesInBatch}, СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ ${result.duplicatesInStorage}.`
+        `Товар ${result.productSku}: добавлено ${result.added}, дубликаты в партии ${result.duplicatesInBatch}, уже существующие ${result.duplicatesInStorage}.`
       );
       setDrafts((prev) => ({ ...prev, [card.productId]: "" }));
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РєР»СЋС‡Рё.");
+      setError(e instanceof Error ? e.message : "Не удалось загрузить ключи.");
     } finally {
       setBusyProductId(null);
     }
@@ -194,17 +194,17 @@ export default function CdkPage() {
     setError(null);
     setSuccess(null);
     if (!canArchive) {
-      setError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ Р°СЂС…РёРІР°С†РёРё.");
+      setError("Недостаточно прав для архивации.");
       return;
     }
 
     setBusyItemId(item.id);
     try {
       await apiFetch(`/v1/admin/inventory/${item.id}/archive`, { method: "POST" });
-      setSuccess(`РљР»СЋС‡ РѕС‚РїСЂР°РІР»РµРЅ РІ Р°СЂС…РёРІ (${card.sku}).`);
+      setSuccess(`Ключ отправлен в архив (${card.sku}).`);
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РєР»СЋС‡ РІ Р°СЂС…РёРІ.");
+      setError(e instanceof Error ? e.message : "Не удалось отправить ключ в архив.");
     } finally {
       setBusyItemId(null);
     }
@@ -214,17 +214,17 @@ export default function CdkPage() {
     setError(null);
     setSuccess(null);
     if (!canUnarchive) {
-      setError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РІРѕР·РІСЂР°С‚Р° РєР»СЋС‡Р°.");
+      setError("Недостаточно прав для возврата ключа.");
       return;
     }
 
     setBusyItemId(item.id);
     try {
       await apiFetch(`/v1/admin/inventory/${item.id}/unarchive`, { method: "POST" });
-      setSuccess(`РљР»СЋС‡ РІРѕР·РІСЂР°С‰РµРЅ РІ С‚РѕРІР°СЂ (${card.sku}).`);
+      setSuccess(`Ключ возвращен в товар (${card.sku}).`);
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РІРµСЂРЅСѓС‚СЊ РєР»СЋС‡ РІ С‚РѕРІР°СЂ.");
+      setError(e instanceof Error ? e.message : "Не удалось вернуть ключ в товар.");
     } finally {
       setBusyItemId(null);
     }
@@ -234,17 +234,17 @@ export default function CdkPage() {
     setError(null);
     setSuccess(null);
     if (!canPurge) {
-      setError("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ РёР· Р°СЂС…РёРІР°.");
+      setError("Недостаточно прав для удаления из архива.");
       return;
     }
 
     setBusyItemId(item.id);
     try {
       await apiFetch(`/v1/admin/inventory/${item.id}/purge`, { method: "POST" });
-      setSuccess(`РљР»СЋС‡ СѓРґР°Р»РµРЅ РёР· Р°СЂС…РёРІР° (${card.sku}).`);
+      setSuccess(`Ключ удален из архива (${card.sku}).`);
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РєР»СЋС‡ РёР· Р°СЂС…РёРІР°.");
+      setError(e instanceof Error ? e.message : "Не удалось удалить ключ из архива.");
     } finally {
       setBusyItemId(null);
     }
@@ -256,10 +256,10 @@ export default function CdkPage() {
     setBackupBusy(true);
     try {
       await apiFetch("/v1/admin/inventory/backups/create", { method: "POST" });
-      setSuccess("Р‘СЌРєР°Рї СЃРєР»Р°РґР° СЃРѕР·РґР°РЅ.");
+      setSuccess("Бэкап склада создан.");
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р±СЌРєР°Рї.");
+      setError(e instanceof Error ? e.message : "Не удалось создать бэкап.");
     } finally {
       setBackupBusy(false);
     }
@@ -269,20 +269,20 @@ export default function CdkPage() {
     setError(null);
     setSuccess(null);
     if (!canRestoreBackup) {
-      setError("РћС‚РєР°С‚ Р±СЌРєР°РїР° РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ superadmin.");
+      setError("Откат бэкапа доступен только superadmin.");
       return;
     }
 
-    const ok = window.confirm(`РћС‚РєР°С‚РёС‚СЊ СЃРєР»Р°Рґ Рє Р±СЌРєР°РїСѓ ${new Date(backup.snapshotDate).toLocaleDateString()}?`);
+    const ok = window.confirm(`Откатить склад к бэкапу ${new Date(backup.snapshotDate).toLocaleDateString()}?`);
     if (!ok) return;
 
     setBackupBusy(true);
     try {
       const result = await apiFetch<{ restoredItems: number }>(`/v1/admin/inventory/backups/${backup.id}/restore`, { method: "POST" });
-      setSuccess(`РЎРєР»Р°Рґ РѕС‚РєР°С‚Р°РЅ. Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРѕ РєР»СЋС‡РµР№: ${result.restoredItems}.`);
+      setSuccess(`Склад откатан. Восстановлено ключей: ${result.restoredItems}.`);
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РѕС‚РєР°С‚.");
+      setError(e instanceof Error ? e.message : "Не удалось выполнить откат.");
     } finally {
       setBackupBusy(false);
     }
@@ -291,15 +291,15 @@ export default function CdkPage() {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>CDK РєР»СЋС‡Рё РїРѕ С‚РѕРІР°СЂР°Рј</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>CDK ключи по товарам</h3>
         <div className="muted" style={{ marginBottom: 10 }}>
-          РЎРєР»Р°Рґ РєР»СЋС‡РµР№ СЂР°Р·РґРµР»РµРЅ РїРѕ С‚РѕРІР°СЂР°Рј. РљР°СЂС‚РѕС‡РєРё РѕРґРёРЅР°РєРѕРІС‹Рµ РїРѕ СЃС‚СЂСѓРєС‚СѓСЂРµ Рё РѕС‚Р»РёС‡Р°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РЅР°Р·РІР°РЅРёРµРј С‚РѕРІР°СЂР°.
+          Склад ключей разделен по товарам. Карточки одинаковые по структуре и отличаются только названием товара.
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8 }}>
           <input
             className="input"
-            placeholder="РџРѕРёСЃРє РїРѕ РєР»СЋС‡Сѓ / Telegram ID / РЅРѕРјРµСЂСѓ Р·Р°РєР°Р·Р°"
+            placeholder="Поиск по ключу / Telegram ID / номеру заказа"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
@@ -307,7 +307,7 @@ export default function CdkPage() {
             }}
           />
           <button className="btn btn-secondary" onClick={() => setSearchQuery(searchInput.trim())}>
-            РџРѕРёСЃРє
+            Поиск
           </button>
           <button
             className="btn btn-secondary"
@@ -316,16 +316,16 @@ export default function CdkPage() {
               setSearchQuery("");
             }}
           >
-            РЎР±СЂРѕСЃ
+            Сброс
           </button>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <button className={`btn ${tab === "active" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTab("active")}>
-            РђРєС‚РёРІРЅС‹Р№ СЃРєР»Р°Рґ
+            Активный склад
           </button>
           <button className={`btn ${tab === "archive" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTab("archive")}>
-            РђСЂС…РёРІ
+            Архив
           </button>
         </div>
       </div>
@@ -333,13 +333,13 @@ export default function CdkPage() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div className="inventory-pills-row">
-            <span className="inventory-pill">Р’СЃРµРіРѕ: {totalStats.total}</span>
-            <span className="inventory-pill">РќРµРёСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ: {totalStats.unused}</span>
-            <span className="inventory-pill">Р РµР·РµСЂРІ: {totalStats.reserved}</span>
-            <span className="inventory-pill">РСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ: {totalStats.issued}</span>
+            <span className="inventory-pill">Всего: {totalStats.total}</span>
+            <span className="inventory-pill">Неиспользованные: {totalStats.unused}</span>
+            <span className="inventory-pill">Резерв: {totalStats.reserved}</span>
+            <span className="inventory-pill">Использованные: {totalStats.issued}</span>
           </div>
           <button className="btn btn-secondary" disabled={backupBusy} onClick={handleCreateBackup}>
-            {backupBusy ? "РћР±СЂР°Р±РѕС‚РєР°..." : "РЎРѕР·РґР°С‚СЊ Р±СЌРєР°Рї"}
+            {backupBusy ? "Обработка..." : "Создать бэкап"}
           </button>
         </div>
 
@@ -347,18 +347,18 @@ export default function CdkPage() {
           <table>
             <thead>
               <tr>
-                <th>Р”Р°С‚Р° Р±СЌРєР°РїР°</th>
-                <th>РљР»СЋС‡РµР№</th>
-                <th>РљРµРј СЃРѕР·РґР°РЅ</th>
-                <th>РЎРѕР·РґР°РЅ</th>
-                <th>Р”РµР№СЃС‚РІРёРµ</th>
+                <th>Дата бэкапа</th>
+                <th>Ключей</th>
+                <th>Кем создан</th>
+                <th>Создан</th>
+                <th>Действие</th>
               </tr>
             </thead>
             <tbody>
               {backups.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="muted">
-                    Р‘СЌРєР°РїС‹ РЅРµ РЅР°Р№РґРµРЅС‹
+                    Бэкапы не найдены
                   </td>
                 </tr>
               ) : (
@@ -370,7 +370,7 @@ export default function CdkPage() {
                     <td>{formatDate(backup.createdAt)}</td>
                     <td>
                       <button className="btn btn-secondary" disabled={!canRestoreBackup || backupBusy} onClick={() => handleRestoreBackup(backup)}>
-                        РћС‚РєР°С‚РёС‚СЊ
+                        Откатить
                       </button>
                     </td>
                   </tr>
@@ -387,7 +387,7 @@ export default function CdkPage() {
       {success ? (
         <div style={{ color: "#bbf7d0", border: "1px solid rgba(34,197,94,.4)", borderRadius: 10, padding: 10 }}>{success}</div>
       ) : null}
-      {loading ? <div className="card">Р—Р°РіСЂСѓР·РєР° СЃРєР»Р°РґР° РєР»СЋС‡РµР№...</div> : null}
+      {loading ? <div className="card">Загрузка склада ключей...</div> : null}
 
       {tab === "active" ? (
         <div className="inventory-grid">
@@ -401,24 +401,24 @@ export default function CdkPage() {
                   <div>
                     <div className="inventory-title">{card.titleRu}</div>
                     <div className="muted inventory-sub">
-                      {card.sku} {card.isActive ? "" : "В· РѕС‚РєР»СЋС‡РµРЅ"}
+                      {card.sku} {card.isActive ? "" : "· отключен"}
                     </div>
                   </div>
                   <div className="inventory-counts">
-                    <div>Р’СЃРµРіРѕ: {card.counts.total}</div>
-                    <div>Р РµР·РµСЂРІ: {card.counts.reserved}</div>
+                    <div>Всего: {card.counts.total}</div>
+                    <div>Резерв: {card.counts.reserved}</div>
                   </div>
                 </div>
 
                 <div className="inventory-pills-row">
-                  <span className="inventory-pill">РќРµРёСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ: {card.counts.unused}</span>
-                  <span className="inventory-pill">РСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ: {card.counts.issued}</span>
+                  <span className="inventory-pill">Неиспользованные: {card.counts.unused}</span>
+                  <span className="inventory-pill">Использованные: {card.counts.issued}</span>
                 </div>
 
                 <textarea
                   className="textarea"
                   rows={4}
-                  placeholder="Р’СЃС‚Р°РІСЊС‚Рµ CDK РєР»СЋС‡Рё (РїРѕ РѕРґРЅРѕРјСѓ РІ СЃС‚СЂРѕРєРµ)"
+                  placeholder="Вставьте CDK ключи (по одному в строке)"
                   value={drafts[card.productId] || ""}
                   onChange={(e) => setDrafts((prev) => ({ ...prev, [card.productId]: e.target.value }))}
                   disabled={!canUpload || busyProductId === card.productId}
@@ -426,31 +426,31 @@ export default function CdkPage() {
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
                   <button className="btn btn-primary" onClick={() => handleUpload(card)} disabled={!canUpload || busyProductId === card.productId}>
-                    {busyProductId === card.productId ? "Р—Р°РіСЂСѓР¶Р°РµРј..." : "Р—Р°РіСЂСѓР·РёС‚СЊ РєР»СЋС‡Рё"}
+                    {busyProductId === card.productId ? "Загружаем..." : "Загрузить ключи"}
                   </button>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    РђРІС‚РѕРІС‹РґР°С‡Р° Р±РµСЂРµС‚ РєР»СЋС‡ С‚РѕР»СЊРєРѕ РёР· СЌС‚РѕРіРѕ С‚РѕРІР°СЂР°
+                    Автовыдача берет ключ только из этого товара
                   </div>
                 </div>
 
                 <div className="inventory-sections">
                   <div className="inventory-section">
-                    <div className="inventory-section-head">РќРµРёСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ Рё СЂРµР·РµСЂРІ</div>
+                    <div className="inventory-section-head">Неиспользованные и резерв</div>
                     <div className="table-wrap inventory-table-scroll">
                       <table>
                         <thead>
                           <tr>
                             <th>CDK</th>
-                            <th>РЎС‚Р°С‚СѓСЃ</th>
-                            <th>Р РµР·РµСЂРІ РґРѕ</th>
-                            <th>Р”РµР№СЃС‚РІРёРµ</th>
+                            <th>Статус</th>
+                            <th>Резерв до</th>
+                            <th>Действие</th>
                           </tr>
                         </thead>
                         <tbody>
                           {unusedItems.length === 0 ? (
                             <tr>
                               <td colSpan={4} className="muted">
-                                РќРµС‚ РєР»СЋС‡РµР№
+                                Нет ключей
                               </td>
                             </tr>
                           ) : (
@@ -465,7 +465,7 @@ export default function CdkPage() {
                                     disabled={!canArchive || busyItemId === item.id || item.status !== "unused"}
                                     onClick={() => handleArchive(card, item)}
                                   >
-                                    Р’ Р°СЂС…РёРІ
+                                    В архив
                                   </button>
                                 </td>
                               </tr>
@@ -477,7 +477,7 @@ export default function CdkPage() {
                   </div>
 
                   <div className="inventory-section">
-                    <div className="inventory-section-head">РСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹Рµ</div>
+                    <div className="inventory-section-head">Использованные</div>
                     <div className="table-wrap inventory-table-scroll">
                       <table>
                         <thead>
@@ -485,15 +485,15 @@ export default function CdkPage() {
                             <th>CDK</th>
                             <th>Telegram ID</th>
                             <th>Username</th>
-                            <th>Р—Р°РєР°Р·</th>
-                            <th>Р”Р°С‚Р° РІС‹РґР°С‡Рё</th>
+                            <th>Заказ</th>
+                            <th>Дата выдачи</th>
                           </tr>
                         </thead>
                         <tbody>
                           {usedItems.length === 0 ? (
                             <tr>
                               <td colSpan={5} className="muted">
-                                РСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹С… РєР»СЋС‡РµР№ РЅРµС‚
+                                Использованных ключей нет
                               </td>
                             </tr>
                           ) : (
@@ -526,7 +526,7 @@ export default function CdkPage() {
                   <div className="muted inventory-sub">{card.sku}</div>
                 </div>
                 <div className="inventory-counts">
-                  <div>Р’ Р°СЂС…РёРІРµ: {card.archivedCount}</div>
+                  <div>В архиве: {card.archivedCount}</div>
                 </div>
               </div>
 
@@ -535,16 +535,16 @@ export default function CdkPage() {
                   <thead>
                     <tr>
                       <th>CDK</th>
-                      <th>РђСЂС…РёРІРёСЂРѕРІР°РЅ</th>
-                      <th>РљРµРј</th>
-                      <th>Р”РµР№СЃС‚РІРёРµ</th>
+                      <th>Архивирован</th>
+                      <th>Кем</th>
+                      <th>Действие</th>
                     </tr>
                   </thead>
                   <tbody>
                     {card.items.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="muted">
-                          РђСЂС…РёРІ РїСѓСЃС‚
+                          Архив пуст
                         </td>
                       </tr>
                     ) : (
@@ -560,14 +560,14 @@ export default function CdkPage() {
                                 disabled={!canUnarchive || busyItemId === item.id}
                                 onClick={() => handleUnarchive(card, item)}
                               >
-                                Р’РµСЂРЅСѓС‚СЊ РІ С‚РѕРІР°СЂ
+                                Вернуть в товар
                               </button>
                               <button
                                 className="btn btn-secondary"
                                 disabled={!canPurge || busyItemId === item.id}
                                 onClick={() => handlePurge(card, item)}
                               >
-                                РЈРґР°Р»РёС‚СЊ
+                                Удалить
                               </button>
                             </div>
                           </td>

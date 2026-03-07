@@ -7,21 +7,21 @@ const API_BASE = "/api_proxy";
 function normalizeApiError(raw: string, status: number): string {
   const message = (raw || "").toLowerCase();
   if (message.includes("unique constraint failed")) {
-    return "РўР°РєРѕРµ Р·РЅР°С‡РµРЅРёРµ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ (РґСѓР±Р»РёРєР°С‚). РР·РјРµРЅРёС‚Рµ РєРѕРґ РёР»Рё СЃР»Р°Рі.";
+    return "Такое значение уже существует (дубликат). Измените код или слаг.";
   }
   if (status === 401 || message.includes("unauthorized") || message.includes("jwt")) {
-    return "РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’РѕР№РґРёС‚Рµ СЃРЅРѕРІР°.";
+    return "Сессия истекла. Войдите снова.";
   }
   if (status === 403 || message.includes("forbidden")) {
-    return "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ СЌС‚РѕРіРѕ РґРµР№СЃС‚РІРёСЏ.";
+    return "Недостаточно прав для этого действия.";
   }
   if (status === 404 || message.includes("not found")) {
-    return "РћР±СЉРµРєС‚ РЅРµ РЅР°Р№РґРµРЅ.";
+    return "Объект не найден.";
   }
   if (status === 400 || message.includes("validation") || message.includes("invalid")) {
-    return raw || "РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕСЂСЂРµРєС‚РЅРѕСЃС‚СЊ Р·Р°РїРѕР»РЅРµРЅРёСЏ РїРѕР»РµР№.";
+    return raw || "Проверьте корректность заполнения полей.";
   }
-  return raw || `РћС€РёР±РєР° Р·Р°РїСЂРѕСЃР° (${status})`;
+  return raw || `Ошибка запроса (${status})`;
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
@@ -53,7 +53,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit, auth = true)
       return apiFetch(path, init, auth);
     }
     clearToken();
-    throw new Error("РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’РѕР№РґРёС‚Рµ СЃРЅРѕРІР°.");
+    throw new Error("Сессия истекла. Войдите снова.");
   }
 
   if (!response.ok) {
